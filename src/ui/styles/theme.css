@@ -1,0 +1,47 @@
+/**
+ * AI Bookmark Brain - Theme CSS Variables
+ * Windows 10/11 flat design system
+ */
+
+:root {
+  /* Light mode (default) */
+  --ai-bb-bg-primary: #ffffff;
+  --ai-bb-bg-secondary: #f5f5f5;
+  --ai-bb-bg-hover: #e5e5e5;
+  --ai-bb-bg-selected: #0078d4;
+  --ai-bb-text-primary: #1a1a1a;
+  --ai-bb-text-secondary: #666666;
+  --ai-bb-text-selected: #ffffff;
+  --ai-bb-border-color: #d1d1d1;
+  --ai-bb-accent: #0078d4;
+  
+  /* Typography */
+  --ai-bb-font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --ai-bb-font-size-sm: 11px;
+  --ai-bb-font-size-md: 13px;
+  --ai-bb-font-size-lg: 14px;
+  
+  /* Spacing */
+  --ai-bb-spacing-xs: 4px;
+  --ai-bb-spacing-sm: 8px;
+  --ai-bb-spacing-md: 12px;
+  --ai-bb-spacing-lg: 16px;
+  
+  /* No border radius - Windows 10/11 flat design */
+  --ai-bb-border-radius: 0;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ai-bb-bg-primary: #2d2d2d;
+    --ai-bb-bg-secondary: #3d3d3d;
+    --ai-bb-bg-hover: #4d4d4d;
+    --ai-bb-bg-selected: #0078d4;
+    --ai-bb-text-primary: #f0f0f0;
+    --ai-bb-text-secondary: #a0a0a0;
+    --ai-bb-text-selected: #ffffff;
+    --ai-bb-border-color: #4d4d4d;
+    --ai-bb-accent: #60cdff;
+  }
+}

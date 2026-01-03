@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>AI Bookmark Brain - Offscreen Document</title>
+</head>
+
+<body>
+    <!-- 
+    This offscreen document hosts the SQLite Web Worker.
+    It acts as a bridge between the background service worker 
+    and the database worker since OPFS requires a document context.
+  -->
+    <script type="module" src="../lib/offscreen-handler.ts"></script>
+</body>
+
+</html>

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Bookmark Brain - Settings</title>
+    <style>
+        /* Windows 10/11 flat design - no border radius */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            background: #f5f5f5;
+            color: #1a1a1a;
+            padding: 24px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: #1e1e1e;
+                color: #f0f0f0;
+            }
+
+            .card {
+                background: #2d2d2d;
+                border-color: #404040;
+            }
+
+            input,
+            select {
+                background: #3d3d3d;
+                border-color: #555;
+                color: #f0f0f0;
+            }
+
+            .status-box {
+                background: #3d3d3d;
+            }
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 24px;
+        }
+
+        h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: #0078d4;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: 1px solid #0078d4;
+            background: #0078d4;
+            color: white;
+            font-size: 14px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #106ebe;
+        }
+
+        button.secondary {
+            background: transparent;
+            color: #0078d4;
+        }
+
+        button.secondary:hover {
+            background: #e5f1fb;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status-box {
+            padding: 12px;
+            background: #f0f0f0;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 12px;
+        }
+
+        .success {
+            color: #107c10;
+        }
+
+        .error {
+            color: #d13438;
+        }
+
+        .info {
+            color: #0078d4;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 16px;
+            background: #e5f1fb;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .stat-item {
+                background: #1a3a5c;
+            }
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 600;
+            color: #0078d4;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .stat-label {
+                color: #999;
+            }
+        }
+
+        /* Sortable list for search priorities */
+        .sortable-list {
+            border: 1px solid #ddd;
+            background: #fafafa;
+            padding: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .sortable-list {
+                background: #2d2d2d;
+                border-color: #404040;
+            }
+        }
+
+        .sortable-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            margin-bottom: 4px;
+            cursor: grab;
+            user-select: none;
+            transition: background-color 0.15s, transform 0.15s;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .sortable-item {
+                background: #3d3d3d;
+                border-color: #555;
+            }
+        }
+
+        .sortable-item:hover {
+            background: #f0f5ff;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .sortable-item:hover {
+                background: #404040;
+            }
+        }
+
+        .sortable-item.dragging {
+            opacity: 0.5;
+            transform: scale(1.02);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .sortable-item .drag-handle {
+            margin-right: 12px;
+            color: #999;
+            font-size: 16px;
+        }
+
+        .sortable-item .strategy-label {
+            flex: 1;
+            font-size: 13px;
+        }
+
+        .sortable-item .strategy-type {
+            font-size: 11px;
+            color: #666;
+            background: #e0e0e0;
+            padding: 2px 6px;
+            margin-left: 8px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .sortable-item .strategy-type {
+                background: #555;
+                color: #ccc;
+            }
+        }
+
+        .sortable-item input[type="checkbox"] {
+            margin-left: auto;
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>AI Bookmark Brain - Settings</h1>
+
+    <!-- API Configuration -->
+    <div class="card">
+        <h2>AI Provider Configuration</h2>
+
+        <div class="form-group">
+            <label for="provider">Active Provider</label>
+            <select id="provider">
+                <option value="deepseek">DeepSeek</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="openai">OpenAI / Custom</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="deepseek-key">DeepSeek API Key</label>
+            <input type="password" id="deepseek-key" placeholder="sk-...">
+        </div>
+
+        <div class="form-group">
+            <label for="gemini-key">Gemini API Key</label>
+            <input type="password" id="gemini-key" placeholder="AI...">
+        </div>
+
+        <div class="form-group">
+            <label for="openai-key">OpenAI API Key</label>
+            <input type="password" id="openai-key" placeholder="sk-...">
+        </div>
+
+        <div class="form-group">
+            <label for="openai-url">OpenAI Base URL (optional, for custom endpoints)</label>
+            <input type="text" id="openai-url" placeholder="https://api.openai.com/v1/chat/completions">
+        </div>
+
+        <div class="button-group">
+            <button id="save-btn">Save Configuration</button>
+            <button id="test-btn" class="secondary">Test Connection</button>
+        </div>
+
+        <div id="test-result" class="status-box" style="display: none;"></div>
+    </div>
+
+    <!-- Sync Status -->
+    <div class="card">
+        <h2>Sync Status</h2>
+
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-value" id="total-bookmarks">-</div>
+                <div class="stat-label">Total Bookmarks</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="summarized-count">-</div>
+                <div class="stat-label">AI Summarized</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="last-sync">-</div>
+                <div class="stat-label">Last Sync</div>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button id="sync-btn">Full Sync Now</button>
+            <button id="summarize-btn" class="secondary">Start AI Summarization</button>
+        </div>
+
+        <div id="sync-log" class="status-box"></div>
+    </div>
+
+    <!-- Test Search -->
+    <div class="card">
+        <h2>Test Search</h2>
+
+        <div class="form-group">
+            <label for="test-query">Search Query</label>
+            <input type="text" id="test-query" placeholder="Enter search term...">
+        </div>
+
+        <div class="button-group">
+            <button id="search-btn">Search</button>
+        </div>
+
+        <div id="search-results" class="status-box" style="display: none;"></div>
+    </div>
+
+    <!-- Search Priority Configuration -->
+    <div class="card">
+        <h2>搜索优先级配置 / Search Priority</h2>
+
+        <p style="margin-bottom: 16px; color: #666;">
+            拖拽调整搜索策略的优先级顺序。位置越高，匹配优先级越高。取消勾选可禁用某个策略。<br>
+            <small>Drag to reorder search strategies. Higher position = higher priority. Uncheck to disable.</small>
+        </p>
+
+        <div id="search-strategies-list" class="sortable-list">
+            <!-- Dynamically generated by options-handler.ts -->
+            <div style="color: #666; padding: 20px; text-align: center;">Loading strategies...</div>
+        </div>
+
+        <div class="button-group">
+            <button id="save-strategies-btn">保存优先级 / Save Priority</button>
+            <button id="reset-strategies-btn" class="secondary">恢复默认 / Reset</button>
+        </div>
+
+        <div id="strategies-status" class="status-box" style="display: none;"></div>
+    </div>
+
+    <!-- UI Appearance Settings -->
+    <div class="card">
+        <h2>UI Appearance</h2>
+
+        <p style="margin-bottom: 16px; color: #666;">
+            Customize font sizes for the search overlay. Line height and spacing adjust automatically.
+        </p>
+
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+            <div class="form-group">
+                <label for="font-search-input">Search Input (px)</label>
+                <input type="number" id="font-search-input" value="14">
+            </div>
+
+            <div class="form-group">
+                <label for="font-result-title">Result Title (px)</label>
+                <input type="number" id="font-result-title" value="14">
+            </div>
+
+            <div class="form-group">
+                <label for="font-result-url">Result URL (px)</label>
+                <input type="number" id="font-result-url" value="11">
+            </div>
+
+            <div class="form-group">
+                <label for="font-result-badge">Badges (px)</label>
+                <input type="number" id="font-result-badge" value="10">
+            </div>
+
+            <div class="form-group">
+                <label for="font-summary-title">Summary Title (px)</label>
+                <input type="number" id="font-summary-title" value="16">
+            </div>
+
+            <div class="form-group">
+                <label for="font-summary-text">Summary Text (px)</label>
+                <input type="number" id="font-summary-text" value="14">
+            </div>
+
+            <div class="form-group">
+                <label for="font-summary-label">Section Labels (px)</label>
+                <input type="number" id="font-summary-label" value="12">
+            </div>
+
+            <div class="form-group">
+                <label for="font-metadata-text">Metadata Text (px)</label>
+                <input type="number" id="font-metadata-text" value="12">
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button id="save-ui-btn">Save UI Settings</button>
+            <button id="reset-fonts-btn" class="secondary">Reset to Defaults</button>
+        </div>
+
+        <div id="ui-status" class="status-box" style="display: none;"></div>
+    </div>
+
+    <!-- Data Management -->
+    <div class="card">
+        <h2>Data Management</h2>
+
+        <p style="margin-bottom: 16px; color: #666;">
+            Export your data to migrate to a new browser/device. Import will merge data incrementally (no duplicates).
+        </p>
+
+        <div class="button-group">
+            <button id="export-db-btn">Export Database (.db)</button>
+        </div>
+
+        <div class="button-group" style="margin-top: 8px;">
+            <input type="file" id="import-db-file" accept=".db,.sqlite,.sqlite3" style="display: none;">
+            <button id="import-db-btn" class="secondary">Import Database</button>
+        </div>
+
+        <div class="button-group" style="margin-top: 16px; border-top: 1px solid #ddd; padding-top: 16px;">
+            <button id="refetch-garbled-btn" class="secondary">修复乱码内容 / Refetch Garbled Content</button>
+        </div>
+        <p style="margin-top: 8px; font-size: 12px; color: #888;">
+            扫描数据库中的空内容或乱码内容，并重新抓取网页。<br>
+            <small>Scans for empty or garbled page content and re-fetches from the web.</small>
+        </p>
+
+        <div id="import-status" class="status-box" style="display: none;"></div>
+    </div>
+
+    <script type="module" src="../lib/options-handler.ts"></script>
+</body>
+
+</html>

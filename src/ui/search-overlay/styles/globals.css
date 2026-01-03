@@ -1,0 +1,145 @@
+@import "tailwindcss";
+
+/**
+ * AI Bookmark Brain - Windows 10/11 Flat Design Theme
+ * No border-radius (sharp corners), Segoe UI font, compact spacing
+ */
+
+@theme {
+    /* ========== Color Palette - Light Mode ========== */
+    --color-bg-primary: #ffffff;
+    --color-bg-secondary: #f5f5f5;
+    --color-bg-hover: #e5e5e5;
+    --color-bg-selected: #0078d4;
+    --color-text-primary: #1a1a1a;
+    --color-text-secondary: #666666;
+    --color-text-selected: #ffffff;
+    --color-border: #d1d1d1;
+    --color-accent: #0078d4;
+
+    /* ========== Color Palette - Dark Mode ========== */
+    --color-dark-bg-primary: #2d2d2d;
+    --color-dark-bg-secondary: #3d3d3d;
+    --color-dark-bg-hover: #4d4d4d;
+    --color-dark-bg-selected: #0078d4;
+    --color-dark-text-primary: #f0f0f0;
+    --color-dark-text-secondary: #a0a0a0;
+    --color-dark-text-selected: #ffffff;
+    --color-dark-border: #4d4d4d;
+    --color-dark-accent: #60cdff;
+
+    /* ========== Font Stack ========== */
+    --font-family-segoe: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+    /* ========== Spacing ========== */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 12px;
+    --spacing-lg: 16px;
+    --spacing-xl: 24px;
+}
+
+/* ========== Shadow DOM Host Reset ========== */
+/* Force consistent sizing regardless of host page styles */
+:host {
+    /* Reset all inheritable properties */
+    all: initial;
+
+    /* Restore needed properties */
+    display: block;
+    font-family: var(--font-family-segoe);
+    font-size: 16px !important;
+    /* Fixed base size for rem calculations */
+    line-height: 1.5;
+    color: var(--text-primary);
+
+    /* Prevent host page zoom/scale from affecting UI */
+    zoom: 1 !important;
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+/* ========== Base Styles ========== */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/* ========== Light/Dark Mode Support ========== */
+:root {
+    --bg-primary: var(--color-bg-primary);
+    --bg-secondary: var(--color-bg-secondary);
+    --bg-hover: var(--color-bg-hover);
+    --bg-selected: var(--color-bg-selected);
+    --text-primary: var(--color-text-primary);
+    --text-secondary: var(--color-text-secondary);
+    --text-selected: var(--color-text-selected);
+    --border: var(--color-border);
+    --accent: var(--color-accent);
+    /* Scrollbar colors - Light mode */
+    --scrollbar-track: #f0f0f0;
+    --scrollbar-thumb: #c0c0c0;
+    --scrollbar-thumb-hover: #a0a0a0;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-primary: var(--color-dark-bg-primary);
+        --bg-secondary: var(--color-dark-bg-secondary);
+        --bg-hover: var(--color-dark-bg-hover);
+        --bg-selected: var(--color-dark-bg-selected);
+        --text-primary: var(--color-dark-text-primary);
+        --text-secondary: var(--color-dark-text-secondary);
+        --text-selected: var(--color-dark-text-selected);
+        --border: var(--color-dark-border);
+        --accent: var(--color-dark-accent);
+        /* Scrollbar colors - Dark mode */
+        --scrollbar-track: #2d2d2d;
+        --scrollbar-thumb: #5a5a5a;
+        --scrollbar-thumb-hover: #707070;
+    }
+}
+
+/* ========== Panel Resize Handle ========== */
+.resize-handle {
+    width: 4px;
+    background: var(--border);
+    cursor: col-resize;
+    transition: background 0.15s;
+}
+
+.resize-handle:hover,
+.resize-handle[data-resize-handle-active] {
+    background: var(--accent);
+}
+
+/* ========== Custom Scrollbar - Windows 10/11 Style ========== */
+/* Thin scrollbar for modern browsers */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* Webkit browsers (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-corner {
+    background: var(--scrollbar-track);
+}
