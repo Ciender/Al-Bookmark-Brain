@@ -8,7 +8,10 @@
 - **内容抓取防护**：HTTP 优先，必要时回退到前台标签页；基于 Readability + html-to-text 提取正文，检测 Cloudflare 挑战、frameset/iframe 场景并过滤乱码。
 - **搜索体验**：Ctrl+Q/Cmd+Q 呼出覆盖层，支持精准/模糊/拼音权重搜索、置顶收藏、Frecency 重排；`@分类` 过滤、下拉多选分类、`!` 前缀搜索浏览历史。
 - **可视化选项页**：设置 API Key/Active Provider 并一键连通性测试；查看同步计数、启动 AI 摘要、测试搜索；拖拽调整搜索策略优先级；调整 UI 字号；导出/导入 .db；扫描并重抓乱码页面。
+  <img width="433" height="574" alt="_T_WD{N68YV7I}A A$PRVOK" src="https://github.com/user-attachments/assets/4c2a4741-f648-4ef7-82fd-3cd0a9e15cc7" />
+
 - **数据与备份**：SQLite 数据保存在 IndexedDB，可导出/导入合并（按 URL 去重并迁移分类/标签/摘要/历史），支持重新拉取损坏内容并记录同步日志。
+<img width="376" height="425" alt="UVQQVW{0@ XS7Z6M(0_$$8" src="https://github.com/user-attachments/assets/c542af7f-5cc7-4d19-ad44-945a30020948" />
 
 ## 开发与构建
 1. 环境：Node 18+、npm。
@@ -20,21 +23,32 @@
 ## 首次配置
 1. 打开扩展“选项”页。
 2. 选择 Active Provider，填入对应的 API Key（可选自定义 OpenAI Base URL），点击 **Save Configuration**。
-3. 如需验证连通性，点击 **Test Connection**（会发送简短请求到所选服务）。
-4. 同步书签：点击 **Full Sync Now**（首次安装后台也会自动触发一次全量同步）。
-5. 启动 AI 摘要：点击 **Start AI Summarization**。后台以 2 条/批次、基于 alarm 的方式运行，崩溃/重载后会自动恢复。
+   <img width="485" height="773" alt="HO7KN%UZ7R6RE$QN8FZ@NS7" src="https://github.com/user-attachments/assets/c45d1efc-4b21-42d4-9ee1-248ff1718768" />
+
+4. 如需验证连通性，点击 **Test Connection**（会发送简短请求到所选服务）。
+5. 同步书签：点击 **Full Sync Now**（首次安装后台也会自动触发一次全量同步）。
+   <img width="474" height="374" alt="S)@M~@M70@O36_BP1AAW3}U" src="https://github.com/user-attachments/assets/0a42c2a8-b0cf-4046-ba2e-1eb21c40b8e2" />
+
+7. 启动 AI 摘要：点击 **Start AI Summarization**。后台以 2 条/批次、基于 alarm 的方式运行，崩溃/重载后会自动恢复。
+   
 
 ## 使用说明
 - **全局搜索覆盖层**：在可注入页面按 `Ctrl+Q`（macOS `Cmd+Q`）或使用扩展命令切换。禁止注入的页面（如 `chrome://`）会被跳过。
+  <img width="1031" height="545" alt="7QHVVZTHBAH0 TQLU{6~UFX" src="https://github.com/user-attachments/assets/69fa4320-c850-40c9-9034-3c6f8e93d8c0" />
+
+
 - **查询技巧**：
   - 直接输入关键词享受精准/模糊/拼音综合权重搜索；结果列表支持方向键选中，Enter 新标签打开，Esc 关闭。
   - 输入 `@分类` 触发分类自动补全；可在左上 Filter 下拉多选分类过滤。
   - 输入 `!关键词`（或中文全角感叹号）切换“浏览历史”模式；右侧面板可一键加入书签。
+   <img width="1031" height="544" alt="I1O`}} 8UN%%(1{{CU8E }V" src="https://github.com/user-attachments/assets/45e754cf-b932-4866-825c-7f88bf6af3e4" />
 - **详情面板**：右侧显示 AI 摘要（双语）、标签、元数据与快捷操作（打开/复制 URL），支持直接修改分类，展示状态/访问次数等。
 - **Options 页进阶**：
   - **Search Priority**：拖拽策略列表以调整匹配字段与匹配方式的优先级，复选框控制启用状态。
   - **UI Appearance**：按需调整搜索框/结果/摘要/元数据字号，支持一键重置。
   - **Data Management**：导出当前 SQLite 为 `.db`；导入时按 URL 合并数据；“Refetch Garbled Content” 批量扫描空内容/乱码并重抓，同时跳过标记为死链的站点。
+    <img width="1029" height="546" alt="BT3})H@O3`TK737L$H{X`GL" src="https://github.com/user-attachments/assets/a5f7620e-3d65-4eab-b8c8-c8c2ff9dc940" />
+
 
 ## 架构速览
 - **背景页**：`src/entrypoints/background.ts` 负责快捷键命令、心跳 keep-alive、消息路由、书签监听、搜索入口、AI 摘要队列与重新抓取乱码内容。
