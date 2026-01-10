@@ -1,6 +1,8 @@
 # AI Bookmark Brain
 
 一款基于 WXT 的浏览器扩展，自动同步 Chrome 书签、抓取网页正文并用 AI 生成双语摘要与标签，支持全局快捷键搜索（含模糊/拼音/分类过滤）和本地 SQLite（sql.js + IndexedDB）持久化。
+<img width="1031" height="545" alt="7QHVVZTHBAH0 TQLU{6~UFX" src="https://github.com/user-attachments/assets/69fa4320-c850-40c9-9034-3c6f8e93d8c0" />  
+
 
 ## 功能亮点
 - **书签同步与状态**：监听 Chrome 书签事件并支持一键全量同步，记录状态/错误，自动恢复 `analyzing` 异常任务。
