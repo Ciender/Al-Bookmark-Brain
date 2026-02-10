@@ -8,6 +8,11 @@ import { logger } from '../../shared/logger';
 import type { SummaryResult, SummarizeRequest } from '../../shared/types';
 import type { AIServiceConfig } from './base';
 import { AIService, formatPrompt, parseAIResponse, fetchWithTimeout } from './base';
+import {
+    buildOpenAIChatCompletionsUrl,
+    buildOpenAIEmbeddingsUrl,
+    normalizeOpenAIBaseUrl,
+} from './endpoints';
 
 export class OpenAICompatibleService implements AIService {
     readonly provider = 'openai';
@@ -17,7 +22,7 @@ export class OpenAICompatibleService implements AIService {
 
     constructor(config: AIServiceConfig) {
         this.apiKey = config.apiKey;
-        this.baseUrl = config.baseUrl || API_ENDPOINTS.OPENAI;
+        this.baseUrl = normalizeOpenAIBaseUrl(config.baseUrl || API_ENDPOINTS.OPENAI);
         this.model = config.model || 'gpt-3.5-turbo';
     }
 
@@ -26,7 +31,7 @@ export class OpenAICompatibleService implements AIService {
 
         try {
             const response = await fetchWithTimeout(
-                `${this.baseUrl}/chat/completions`,
+                buildOpenAIChatCompletionsUrl(this.baseUrl),
                 {
                     method: 'POST',
                     headers: {
@@ -72,7 +77,7 @@ export class OpenAICompatibleService implements AIService {
     async testConnection(): Promise<boolean> {
         try {
             const response = await fetchWithTimeout(
-                `${this.baseUrl}/chat/completions`,
+                buildOpenAIChatCompletionsUrl(this.baseUrl),
                 {
                     method: 'POST',
                     headers: {
@@ -102,7 +107,7 @@ export class OpenAICompatibleService implements AIService {
     async generateEmbedding(text: string): Promise<number[] | null> {
         try {
             const response = await fetchWithTimeout(
-                `${this.baseUrl}/embeddings`,
+                buildOpenAIEmbeddingsUrl(this.baseUrl),
                 {
                     method: 'POST',
                     headers: {

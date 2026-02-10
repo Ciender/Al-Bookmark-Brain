@@ -516,6 +516,7 @@ export const QUERIES = {
     SELECT b.*, s.summary_text, s.summary_text_lower,
       GROUP_CONCAT(DISTINCT t.name) as tag_names,
       GROUP_CONCAT(DISTINCT t.name_pinyin) as tag_pinyins,
+      c.id as category_id,
       c.name as category_name,
       c.name_pinyin as category_pinyin
     FROM bookmarks b

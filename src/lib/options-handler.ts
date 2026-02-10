@@ -4,18 +4,19 @@
  */
 
 import { apiKeys, activeProvider, syncStatus, extensionSettings, uiSettings, DEFAULT_FONT_SIZES, type FontSettings, searchStrategyOrder } from '../lib/storage';
-import { MESSAGE_TYPES } from '../shared/constants';
+import { AI_PROVIDERS, MESSAGE_TYPES } from '../shared/constants';
 import { logger } from '../shared/logger';
 import { DEFAULT_SEARCH_STRATEGIES, loadSearchStrategies, type SearchStrategy } from '../services/search/search-config';
-
-// Default API key for DeepSeek (provided by user)
-const DEFAULT_DEEPSEEK_KEY = 'sk-4e';
+import { createAIService } from '../services/ai/factory';
+import type { AIProviderType } from '../shared/types';
 
 // DOM Elements
 const providerSelect = document.getElementById('provider') as HTMLSelectElement;
 const deepseekKeyInput = document.getElementById('deepseek-key') as HTMLInputElement;
 const geminiKeyInput = document.getElementById('gemini-key') as HTMLInputElement;
 const openaiKeyInput = document.getElementById('openai-key') as HTMLInputElement;
+const deepseekUrlInput = document.getElementById('deepseek-url') as HTMLInputElement | null;
+const geminiUrlInput = document.getElementById('gemini-url') as HTMLInputElement | null;
 const openaiUrlInput = document.getElementById('openai-url') as HTMLInputElement;
 const saveBtn = document.getElementById('save-btn') as HTMLButtonElement;
 const testBtn = document.getElementById('test-btn') as HTMLButtonElement;
@@ -49,8 +50,16 @@ const uiStatus = document.getElementById('ui-status') as HTMLDivElement;
 function log(element: HTMLDivElement, message: string, type: 'info' | 'success' | 'error' = 'info') {
     const time = new Date().toLocaleTimeString();
     element.style.display = 'block';
-    element.innerHTML += `<span class="${type}">[${time}] ${message}</span>\n`;
+    const line = document.createElement('span');
+    line.className = type;
+    line.textContent = `[${time}] ${message}`;
+    element.appendChild(line);
+    element.appendChild(document.createTextNode('\n'));
     element.scrollTop = element.scrollHeight;
+}
+
+function clearStatus(element: HTMLDivElement) {
+    element.textContent = '';
 }
 
 /**
@@ -65,16 +74,11 @@ async function loadConfig() {
         // Load API keys
         const keys = await apiKeys.getValue();
 
-        // If no DeepSeek key saved, use default
-        if (!keys.deepseek) {
-            keys.deepseek = DEFAULT_DEEPSEEK_KEY;
-            await apiKeys.setValue(keys);
-            logger.info('Default DeepSeek API key initialized');
-        }
-
         deepseekKeyInput.value = keys.deepseek || '';
         geminiKeyInput.value = keys.gemini || '';
         openaiKeyInput.value = keys.openai || '';
+        if (deepseekUrlInput) deepseekUrlInput.value = keys.deepseekBaseUrl || '';
+        if (geminiUrlInput) geminiUrlInput.value = keys.geminiBaseUrl || '';
         openaiUrlInput.value = keys.openaiBaseUrl || '';
 
         // Load sync status
@@ -116,10 +120,12 @@ async function saveConfig() {
 
         // Save API keys
         await apiKeys.setValue({
-            deepseek: deepseekKeyInput.value.trim() || undefined,
-            gemini: geminiKeyInput.value.trim() || undefined,
-            openai: openaiKeyInput.value.trim() || undefined,
-            openaiBaseUrl: openaiUrlInput.value.trim() || undefined,
+            deepseek: deepseekKeyInput.value.trim(),
+            gemini: geminiKeyInput.value.trim(),
+            openai: openaiKeyInput.value.trim(),
+            deepseekBaseUrl: deepseekUrlInput?.value.trim() || '',
+            geminiBaseUrl: geminiUrlInput?.value.trim() || '',
+            openaiBaseUrl: openaiUrlInput.value.trim(),
         });
 
         log(testResult, 'Configuration saved successfully!', 'success');
@@ -140,10 +146,10 @@ async function testConnection() {
     try {
         testBtn.disabled = true;
         testBtn.textContent = 'Testing...';
-        testResult.innerHTML = '';
+        clearStatus(testResult);
         testResult.style.display = 'block';
 
-        const provider = providerSelect.value;
+        const provider = providerSelect.value as AIProviderType;
         log(testResult, `Testing ${provider} connection...`, 'info');
 
         // Get the API key for selected provider
@@ -151,13 +157,15 @@ async function testConnection() {
         let baseUrl = '';
 
         switch (provider) {
-            case 'deepseek':
+            case AI_PROVIDERS.DEEPSEEK:
                 apiKey = deepseekKeyInput.value.trim();
+                baseUrl = deepseekUrlInput?.value.trim() || '';
                 break;
-            case 'gemini':
+            case AI_PROVIDERS.GEMINI:
                 apiKey = geminiKeyInput.value.trim();
+                baseUrl = geminiUrlInput?.value.trim() || '';
                 break;
-            case 'openai':
+            case AI_PROVIDERS.OPENAI:
                 apiKey = openaiKeyInput.value.trim();
                 baseUrl = openaiUrlInput.value.trim();
                 break;
@@ -168,53 +176,16 @@ async function testConnection() {
             return;
         }
 
-        // Make a simple test request
-        let testUrl = '';
-        let testBody: any = {};
-        let headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-        };
-
-        if (provider === 'deepseek') {
-            testUrl = 'https://api.deepseek.com/v1/chat/completions';
-            headers['Authorization'] = `Bearer ${apiKey}`;
-            testBody = {
-                model: 'deepseek-chat',
-                messages: [{ role: 'user', content: 'Hi' }],
-                max_tokens: 5,
-            };
-        } else if (provider === 'gemini') {
-            testUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
-            testBody = {
-                contents: [{ parts: [{ text: 'Hi' }] }],
-                generationConfig: { maxOutputTokens: 5 },
-            };
-        } else if (provider === 'openai') {
-            testUrl = baseUrl || 'https://api.openai.com/v1/chat/completions';
-            headers['Authorization'] = `Bearer ${apiKey}`;
-            testBody = {
-                model: 'gpt-3.5-turbo',
-                messages: [{ role: 'user', content: 'Hi' }],
-                max_tokens: 5,
-            };
-        }
-
-        log(testResult, `Sending request to ${testUrl.substring(0, 50)}...`, 'info');
-
-        const response = await fetch(testUrl, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(testBody),
+        const service = createAIService(provider, {
+            apiKey,
+            baseUrl: baseUrl || undefined,
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            log(testResult, `✓ Connection successful!`, 'success');
-            log(testResult, `Response: ${JSON.stringify(data).substring(0, 200)}...`, 'info');
+        const connected = await service.testConnection();
+        if (connected) {
+            log(testResult, '✓ Connection successful!', 'success');
         } else {
-            const error = await response.text();
-            log(testResult, `✗ Connection failed: ${response.status}`, 'error');
-            log(testResult, `Error: ${error.substring(0, 200)}`, 'error');
+            log(testResult, '✗ Connection failed', 'error');
         }
     } catch (error) {
         log(testResult, `✗ Connection error: ${error}`, 'error');
@@ -231,7 +202,7 @@ async function triggerSync() {
     try {
         syncBtn.disabled = true;
         syncBtn.textContent = 'Syncing...';
-        syncLog.innerHTML = '';
+        clearStatus(syncLog);
 
         log(syncLog, 'Starting full bookmark sync...', 'info');
 
@@ -299,7 +270,7 @@ async function testSearch() {
 
     try {
         searchBtn.disabled = true;
-        searchResults.innerHTML = '';
+        clearStatus(searchResults);
         searchResults.style.display = 'block';
 
         log(searchResults, `Searching for: "${query}"...`, 'info');
@@ -385,7 +356,7 @@ async function exportDatabase() {
     try {
         exportDbBtn.disabled = true;
         exportDbBtn.textContent = 'Exporting...';
-        importStatus.innerHTML = '';
+        clearStatus(importStatus);
 
         log(importStatus, 'Exporting database...', 'info');
 
@@ -431,7 +402,7 @@ async function handleDatabaseImport(file: File) {
     try {
         importDbBtn.disabled = true;
         importDbBtn.textContent = 'Importing...';
-        importStatus.innerHTML = '';
+        clearStatus(importStatus);
 
         log(importStatus, `Importing database from: ${file.name}`, 'info');
 
@@ -535,7 +506,7 @@ async function saveFontSettings() {
 
         saveUiBtn.disabled = true;
         saveUiBtn.textContent = 'Saving...';
-        if (uiStatus) uiStatus.innerHTML = '';
+        if (uiStatus) clearStatus(uiStatus);
 
         const fontSizes: FontSettings = {
             searchInput: parseInt(fontSearchInputEl?.value) || DEFAULT_FONT_SIZES.searchInput,
@@ -571,7 +542,7 @@ async function resetFontSettings() {
 
         resetFontsBtn.disabled = true;
         resetFontsBtn.textContent = 'Resetting...';
-        if (uiStatus) uiStatus.innerHTML = '';
+        if (uiStatus) clearStatus(uiStatus);
 
         await uiSettings.setValue({ fontSizes: { ...DEFAULT_FONT_SIZES } });
         await loadFontSettings();
@@ -641,14 +612,36 @@ async function loadSearchStrategiesUI() {
 function renderStrategiesList() {
     if (!strategiesList) return;
 
-    strategiesList.innerHTML = currentStrategies.map((s, i) => `
-        <div class="sortable-item" draggable="true" data-id="${s.id}" data-index="${i}">
-            <span class="drag-handle">☰</span>
-            <span class="strategy-label">${s.labelZh || s.label}</span>
-            <span class="strategy-type">${getMatchTypeLabel(s.matchType)}</span>
-            <input type="checkbox" ${s.enabled ? 'checked' : ''} data-id="${s.id}" title="启用/禁用">
-        </div>
-    `).join('');
+    strategiesList.textContent = '';
+
+    currentStrategies.forEach((strategy, index) => {
+        const item = document.createElement('div');
+        item.className = 'sortable-item';
+        item.draggable = true;
+        item.dataset.id = strategy.id;
+        item.dataset.index = String(index);
+
+        const handle = document.createElement('span');
+        handle.className = 'drag-handle';
+        handle.textContent = '☰';
+
+        const label = document.createElement('span');
+        label.className = 'strategy-label';
+        label.textContent = strategy.labelZh || strategy.label;
+
+        const type = document.createElement('span');
+        type.className = 'strategy-type';
+        type.textContent = getMatchTypeLabel(strategy.matchType);
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = strategy.enabled;
+        checkbox.dataset.id = strategy.id;
+        checkbox.title = '启用/禁用';
+
+        item.append(handle, label, type, checkbox);
+        strategiesList.appendChild(item);
+    });
 
     // Initialize drag and drop
     initDragAndDrop();
@@ -753,7 +746,7 @@ async function saveSearchStrategies() {
 
         saveStrategiesBtn.disabled = true;
         saveStrategiesBtn.textContent = 'Saving...';
-        if (strategiesStatus) strategiesStatus.innerHTML = '';
+        if (strategiesStatus) clearStatus(strategiesStatus);
 
         // Update from DOM first
         updateStrategiesFromDOM();
@@ -785,7 +778,7 @@ async function resetSearchStrategies() {
 
         resetStrategiesBtn.disabled = true;
         resetStrategiesBtn.textContent = 'Resetting...';
-        if (strategiesStatus) strategiesStatus.innerHTML = '';
+        if (strategiesStatus) clearStatus(strategiesStatus);
 
         // Clear storage
         await searchStrategyOrder.setValue({ strategies: [] });
@@ -844,7 +837,7 @@ function startRefetchProgressListener() {
         if (!progress) return;
 
         // Clear previous content and show progress
-        importStatus.innerHTML = '';
+        clearStatus(importStatus);
 
         if (progress.phase === 'scanning') {
             log(importStatus, `📊 扫描完成 / Scan complete`, 'success');
@@ -898,7 +891,7 @@ async function triggerRefetchGarbled() {
     try {
         refetchGarbledBtn.disabled = true;
         refetchGarbledBtn.textContent = '扫描中... / Scanning...';
-        importStatus.innerHTML = '';
+        clearStatus(importStatus);
 
         log(importStatus, '⏳ 扫描书签中... / Scanning bookmarks...', 'info');
 

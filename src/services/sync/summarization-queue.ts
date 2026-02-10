@@ -227,13 +227,8 @@ async function summarizeBookmark(bookmark: Bookmark): Promise<boolean> {
     } catch (error) {
         logger.error('Summarization failed for:', bookmark.originalTitle, error);
 
-        // Increment retry count and update status
-        const newRetryCount = (bookmark.retryCount || 0) + 1;
-        await BookmarkRepository.updateStatus(
-            bookmark.id,
-            newRetryCount >= 3 ? 'failed' : 'pending',
-            String(error)
-        );
+        // Atomically increment retry count and update status
+        await BookmarkRepository.markSummarizationFailure(bookmark.id, String(error), 3);
 
         await SyncLogRepository.create({
             action: 'analyze',
@@ -272,7 +267,7 @@ export async function summarizePage(
 ): Promise<boolean> {
     try {
         // Check if bookmark exists
-        let bookmark = await BookmarkRepository.findByChromeId(url);
+        let bookmark = await BookmarkRepository.findByUrl(url);
 
         if (!bookmark) {
             // Create temporary bookmark entry

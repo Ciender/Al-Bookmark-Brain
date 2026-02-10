@@ -333,10 +333,17 @@ async function onBookmarkChanged(
     logger.info('Bookmark changed event:', changeInfo.title);
 
     try {
-        await BookmarkRepository.update(id, {
-            originalTitle: changeInfo.title,
-            url: changeInfo.url,
-        });
+        const updateData: Partial<Bookmark> = {};
+        if (changeInfo.title !== undefined) {
+            updateData.originalTitle = changeInfo.title;
+        }
+        if (changeInfo.url !== undefined) {
+            updateData.url = changeInfo.url;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+            await BookmarkRepository.update(id, updateData);
+        }
     } catch (error) {
         logger.error('Failed to update bookmark:', error);
     }

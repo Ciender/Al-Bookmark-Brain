@@ -329,6 +329,8 @@ export interface SettingsExport {
         deepseek: string;
         gemini: string;
         openai: string;
+        deepseekBaseUrl: string;
+        geminiBaseUrl: string;
         openaiBaseUrl: string;
     };
     activeProvider: string;

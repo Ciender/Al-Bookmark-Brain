@@ -8,20 +8,23 @@ import { logger } from '../../shared/logger';
 import type { SummaryResult, SummarizeRequest } from '../../shared/types';
 import type { AIServiceConfig } from './base';
 import { AIService, formatPrompt, parseAIResponse, fetchWithTimeout } from './base';
+import { buildGeminiGenerateContentUrl } from './endpoints';
 
 export class GeminiService implements AIService {
     readonly provider = 'gemini';
     private apiKey: string;
+    private baseUrl: string;
     private model: string;
 
     constructor(config: AIServiceConfig) {
         this.apiKey = config.apiKey;
+        this.baseUrl = config.baseUrl || API_ENDPOINTS.GEMINI;
         this.model = config.model || 'gemini-pro';
     }
 
     async summarize(request: SummarizeRequest): Promise<SummaryResult> {
         const prompt = formatPrompt(request);
-        const url = `${API_ENDPOINTS.GEMINI}/${this.model}:generateContent?key=${this.apiKey}`;
+        const url = `${buildGeminiGenerateContentUrl(this.model, this.baseUrl)}?key=${this.apiKey}`;
 
         try {
             const response = await fetchWithTimeout(
@@ -65,7 +68,7 @@ export class GeminiService implements AIService {
 
     async testConnection(): Promise<boolean> {
         try {
-            const url = `${API_ENDPOINTS.GEMINI}/${this.model}:generateContent?key=${this.apiKey}`;
+            const url = `${buildGeminiGenerateContentUrl(this.model, this.baseUrl)}?key=${this.apiKey}`;
             const response = await fetchWithTimeout(
                 url,
                 {

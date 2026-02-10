@@ -83,9 +83,9 @@ export const AI_PROVIDERS = {
 
 // API Endpoints
 export const API_ENDPOINTS = {
-    DEEPSEEK: 'https://api.deepseek.com/v1/chat/completions',
-    GEMINI: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
-    OPENAI: 'https://api.openai.com/v1/chat/completions',
+    DEEPSEEK: 'https://api.deepseek.com/v1',
+    GEMINI: 'https://generativelanguage.googleapis.com/v1beta',
+    OPENAI: 'https://api.openai.com/v1',
 } as const;
 
 // UI Constants

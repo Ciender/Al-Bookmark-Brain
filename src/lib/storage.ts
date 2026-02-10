@@ -12,12 +12,16 @@ export const apiKeys = storage.defineItem<{
     deepseek: string;
     gemini: string;
     openai: string;
+    deepseekBaseUrl: string;
+    geminiBaseUrl: string;
     openaiBaseUrl: string;
 }>('local:apiKeys', {
     defaultValue: {
-        deepseek: 'sk-4e', // Default API key
+        deepseek: '',
         gemini: '',
         openai: '',
+        deepseekBaseUrl: '',
+        geminiBaseUrl: '',
         openaiBaseUrl: '',
     },
 });

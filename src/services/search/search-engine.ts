@@ -8,7 +8,6 @@ import Fuse from 'fuse.js';
 import pinyinMatch from 'pinyin-match';
 import { logger } from '../../shared/logger';
 import { BookmarkRepository, SearchHistoryRepository } from '../database.service';
-import { SEARCH_WEIGHTS } from '../../database/schema';
 import { sortByFrecency } from './frecency.service';
 import {
     loadSearchStrategies,
@@ -218,7 +217,7 @@ function fieldToMatchType(field: SearchField, matchMode: MatchMode): MatchType {
  * Supports @category prefix for category filtering
  */
 export async function search(options: SearchOptions): Promise<SearchResult[]> {
-    const { query, searchType = 'default', limit = 20 } = options;
+    const { query, searchType = 'default', limit = 20, filters } = options;
 
     if (!query || query.trim().length === 0) {
         return [];
@@ -232,6 +231,24 @@ export async function search(options: SearchOptions): Promise<SearchResult[]> {
     let effectiveQuery = query;
     let categoryFilter: string | null = null;
     let filteredIndex = searchIndex;
+    const allowedIds = new Set<number>();
+
+    // Apply explicit filters first
+    if (filters) {
+        filteredIndex = filteredIndex.filter((bookmark) => {
+            if (filters.categoryId !== undefined) {
+                if (bookmark.userCategoryId !== filters.categoryId) return false;
+            }
+            if (filters.status !== undefined && bookmark.status !== filters.status) return false;
+            if (filters.isPinned !== undefined && bookmark.isPinned !== filters.isPinned) return false;
+            if (filters.isArchived !== undefined && bookmark.isArchived !== filters.isArchived) return false;
+            if (filters.hasAiSummary !== undefined) {
+                const hasSummary = Boolean(bookmark.summary?.summaryText);
+                if (hasSummary !== filters.hasAiSummary) return false;
+            }
+            return true;
+        });
+    }
 
     if (isCategorySearch(query)) {
         const parsed = parseCategorySearch(query);
@@ -239,7 +256,7 @@ export async function search(options: SearchOptions): Promise<SearchResult[]> {
         effectiveQuery = parsed.keyword;
 
         // Filter by exact category name match (case-insensitive)
-        filteredIndex = searchIndex.filter(bookmark => {
+        filteredIndex = filteredIndex.filter(bookmark => {
             const catName = bookmark.category?.name?.toLowerCase();
             return catName === categoryFilter?.toLowerCase();
         });
@@ -262,6 +279,10 @@ export async function search(options: SearchOptions): Promise<SearchResult[]> {
                     matchedField: 'category',
                 }));
         }
+    }
+
+    for (const bookmark of filteredIndex) {
+        allowedIds.add(bookmark.id);
     }
 
     const results: Map<number, SearchResult> = new Map();
@@ -339,6 +360,9 @@ export async function search(options: SearchOptions): Promise<SearchResult[]> {
             : 35; // Fallback if no fuzzy strategy configured
 
         for (const result of fuseResults) {
+            if (!allowedIds.has(result.item.id)) {
+                continue;
+            }
             if (!results.has(result.item.id)) {
                 // Adjust score based on Fuse.js match quality (0 = perfect, 1 = poor)
                 const fuseQuality = 1 - (result.score || 0);

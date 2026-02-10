@@ -117,15 +117,38 @@ export const BookmarkRepository = {
     },
 
     async update(chromeId: string, data: Partial<Bookmark>): Promise<number> {
+        const updates: string[] = [];
+        const params: unknown[] = [];
+
+        if (data.originalTitle !== undefined) {
+            updates.push('original_title = ?');
+            params.push(data.originalTitle);
+        }
+        if (data.url !== undefined) {
+            updates.push('url = ?');
+            params.push(data.url);
+        }
+        if (data.faviconUrl !== undefined) {
+            updates.push('favicon_url = ?');
+            params.push(data.faviconUrl || null);
+        }
+        if (data.chromeFolderPath !== undefined) {
+            updates.push('chrome_folder_path = ?');
+            params.push(data.chromeFolderPath || null);
+        }
+
+        if (updates.length === 0) {
+            return 0;
+        }
+
         const now = Date.now();
-        const result = await execute(QUERIES.UPDATE_BOOKMARK, [
-            data.originalTitle,
-            data.url,
-            data.faviconUrl || null,
-            data.chromeFolderPath || null,
-            now,
-            chromeId,
-        ]);
+        updates.push('last_updated = ?');
+        params.push(now, chromeId);
+
+        const result = await execute(
+            `UPDATE bookmarks SET ${updates.join(', ')} WHERE chrome_bookmark_id = ?`,
+            params
+        );
         logger.debug('Bookmark updated:', data.originalTitle);
         return result.changes;
     },
@@ -152,6 +175,24 @@ export const BookmarkRepository = {
             now,
             id,
         ]);
+        return result.changes;
+    },
+
+    async markSummarizationFailure(id: number, errorMessage: string, maxRetries = 3): Promise<number> {
+        const now = Date.now();
+        const result = await execute(
+            `UPDATE bookmarks
+             SET retry_count = retry_count + 1,
+                 status = CASE
+                   WHEN retry_count + 1 >= ? THEN 'failed'
+                   ELSE 'pending'
+                 END,
+                 error_message = ?,
+                 analyzed_at = NULL,
+                 last_updated = ?
+             WHERE id = ?`,
+            [maxRetries, errorMessage, now, id]
+        );
         return result.changes;
     },
 
@@ -511,7 +552,7 @@ function mapRowToBookmarkWithDetails(row: Record<string, unknown>): BookmarkWith
     // Parse category
     const category: Category | undefined = row.category_name
         ? {
-            id: 0,
+            id: (row.category_id as number) || 0,
             name: row.category_name as string,
             namePinyin: row.category_pinyin as string | undefined,
             color: '#808080',

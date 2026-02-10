@@ -45,9 +45,11 @@ export async function getActiveAIService(): Promise<AIService | null> {
         switch (provider) {
             case AI_PROVIDERS.DEEPSEEK:
                 apiKey = keys.deepseek;
+                baseUrl = keys.deepseekBaseUrl;
                 break;
             case AI_PROVIDERS.GEMINI:
                 apiKey = keys.gemini;
+                baseUrl = keys.geminiBaseUrl;
                 break;
             case AI_PROVIDERS.OPENAI:
                 apiKey = keys.openai;
@@ -75,14 +77,20 @@ export async function testAllProviders(): Promise<Record<AIProviderType, boolean
     const results: Record<string, boolean> = {};
 
     if (keys.deepseek) {
-        const service = new DeepSeekService({ apiKey: keys.deepseek });
+        const service = new DeepSeekService({
+            apiKey: keys.deepseek,
+            baseUrl: keys.deepseekBaseUrl,
+        });
         results[AI_PROVIDERS.DEEPSEEK] = await service.testConnection();
     } else {
         results[AI_PROVIDERS.DEEPSEEK] = false;
     }
 
     if (keys.gemini) {
-        const service = new GeminiService({ apiKey: keys.gemini });
+        const service = new GeminiService({
+            apiKey: keys.gemini,
+            baseUrl: keys.geminiBaseUrl,
+        });
         results[AI_PROVIDERS.GEMINI] = await service.testConnection();
     } else {
         results[AI_PROVIDERS.GEMINI] = false;

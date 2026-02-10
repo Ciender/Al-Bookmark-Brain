@@ -8,14 +8,17 @@ import { logger } from '../../shared/logger';
 import type { SummaryResult, SummarizeRequest } from '../../shared/types';
 import type { AIServiceConfig } from './base';
 import { AIService, formatPrompt, parseAIResponse, fetchWithTimeout } from './base';
+import { buildDeepSeekChatCompletionsUrl } from './endpoints';
 
 export class DeepSeekService implements AIService {
     readonly provider = 'deepseek';
     private apiKey: string;
+    private baseUrl: string;
     private model: string;
 
     constructor(config: AIServiceConfig) {
         this.apiKey = config.apiKey;
+        this.baseUrl = config.baseUrl || API_ENDPOINTS.DEEPSEEK;
         this.model = config.model || 'deepseek-chat';
     }
 
@@ -24,7 +27,7 @@ export class DeepSeekService implements AIService {
 
         try {
             const response = await fetchWithTimeout(
-                API_ENDPOINTS.DEEPSEEK,
+                buildDeepSeekChatCompletionsUrl(this.baseUrl),
                 {
                     method: 'POST',
                     headers: {
@@ -70,7 +73,7 @@ export class DeepSeekService implements AIService {
     async testConnection(): Promise<boolean> {
         try {
             const response = await fetchWithTimeout(
-                API_ENDPOINTS.DEEPSEEK,
+                buildDeepSeekChatCompletionsUrl(this.baseUrl),
                 {
                     method: 'POST',
                     headers: {
