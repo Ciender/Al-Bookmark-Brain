@@ -12,7 +12,7 @@ export function SearchInput({
     value,
     onChange,
     onKeyDown,
-    placeholder = 'Search bookmarks... (@类别 filter)'
+    placeholder = 'Search bookmarks... (@category filter)'
 }: SearchInputProps) {
     const [categorySelectedIndex, setCategorySelectedIndex] = useState(-1);
     const [categoryCount, setCategoryCount] = useState(0);

@@ -24,7 +24,7 @@ interface CategorySuggestionsProps {
  * e.g., "@服务" => "服务", "@" => ""
  */
 function extractCategoryPrefix(query: string): string | null {
-    const match = query.match(/^[@＠]([^\s]*)$/);
+    const match = query.match(/^[@\uFF20]([^\s]*)$/);
     if (match) {
         return match[1] || '';
     }

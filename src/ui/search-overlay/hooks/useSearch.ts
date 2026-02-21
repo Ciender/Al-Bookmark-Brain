@@ -9,8 +9,8 @@ import { MESSAGE_TYPES, UI } from '../../../shared/constants';
 import type { SearchResult, Category, SearchOptions, HistorySearchResult } from '../../../shared/types';
 import { logger } from '../../../shared/logger';
 
-// History search prefix: ! or ！ (Chinese)
-const HISTORY_PREFIX = /^[!！]/;
+// History search prefix: ! or full-width exclamation
+const HISTORY_PREFIX = /^[!\uFF01]/;
 
 export type SearchMode = 'bookmark' | 'history';
 
@@ -73,7 +73,7 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
             return;
         }
 
-        // Detect history search mode (! or ！ prefix)
+        // Detect history search mode (! or full-width exclamation prefix)
         const isHistory = HISTORY_PREFIX.test(trimmedQuery);
         setSearchMode(isHistory ? 'history' : 'bookmark');
 

@@ -45,7 +45,7 @@ const STRATEGIES_REFRESH_INTERVAL = 30000; // 30 seconds
 // =====================================================
 
 // Match @category prefix (supports Chinese and English @ symbols)
-const CATEGORY_PREFIX = /^[@＠]([^\s]+)(?:\s+(.*))?$/;
+const CATEGORY_PREFIX = /^[@\uFF20]([^\s]+)(?:\s+(.*))?$/;
 
 /**
  * Check if query uses @category prefix
@@ -57,7 +57,7 @@ export function isCategorySearch(query: string): boolean {
 /**
  * Parse @category search query
  * Returns { category: string, keyword: string }
- * Example: "@服务器 react" => { category: "服务器", keyword: "react" }
+ * Example: "@服务�?react" => { category: "服务�?, keyword: "react" }
  */
 export function parseCategorySearch(query: string): { category: string; keyword: string } {
     const match = query.trim().match(CATEGORY_PREFIX);
@@ -68,6 +68,18 @@ export function parseCategorySearch(query: string): { category: string; keyword:
         };
     }
     return { category: '', keyword: query };
+}
+
+/**
+ * Split query into terms by whitespace.
+ * Multi-term queries use AND semantics to improve precision.
+ */
+function splitQueryTerms(query: string): string[] {
+    return query
+        .trim()
+        .split(/\s+/u)
+        .map(term => term.trim())
+        .filter(Boolean);
 }
 
 
@@ -190,6 +202,51 @@ function getFieldText(bookmark: BookmarkWithDetails, field: SearchField): string
     }
 }
 
+interface StrategyMatch {
+    score: number;
+    matchType: MatchType;
+    field: SearchField;
+}
+
+/**
+ * Find best non-fuzzy strategy match for a single term.
+ * Returns highest-priority strategy match or null.
+ */
+function findBestMatchForTerm(
+    bookmark: BookmarkWithDetails,
+    term: string,
+    enabledStrategies: SearchStrategy[],
+    searchType: string,
+    totalStrategies: number
+): StrategyMatch | null {
+    for (let i = 0; i < enabledStrategies.length; i++) {
+        const strategy = enabledStrategies[i];
+
+        // Skip content field unless in fulltext mode
+        if (strategy.field === 'content' && searchType !== 'fulltext') {
+            continue;
+        }
+
+        // Skip fuzzy strategies here (handled by Fuse.js in phase 2)
+        if (strategy.matchType === 'fuzzy') {
+            continue;
+        }
+
+        const texts = getFieldText(bookmark, strategy.field);
+        const matched = texts.some(text => checkMatch(term, text, strategy.matchType));
+
+        if (matched) {
+            return {
+                score: calculateScore(i, totalStrategies),
+                matchType: fieldToMatchType(strategy.field, strategy.matchType),
+                field: strategy.field,
+            };
+        }
+    }
+
+    return null;
+}
+
 /**
  * Map SearchField to MatchType for result
  */
@@ -281,6 +338,8 @@ export async function search(options: SearchOptions): Promise<SearchResult[]> {
         }
     }
 
+    const queryTerms = splitQueryTerms(effectiveQuery);
+
     for (const bookmark of filteredIndex) {
         allowedIds.add(bookmark.id);
     }
@@ -291,55 +350,42 @@ export async function search(options: SearchOptions): Promise<SearchResult[]> {
 
     // ========================================
     // Phase 1: Strategy-based matching
-    // For each bookmark, find the highest-priority strategy that matches
+    // Multi-term queries use AND semantics across terms.
     // ========================================
     for (const bookmark of filteredIndex) {
+        const termMatches: StrategyMatch[] = [];
+        let allTermsMatched = true;
 
-        let bestMatch: { score: number; matchType: MatchType; field: string } | null = null;
+        for (const term of queryTerms) {
+            const termMatch = findBestMatchForTerm(
+                bookmark,
+                term,
+                enabledStrategies,
+                searchType,
+                totalStrategies
+            );
 
-        // Iterate through strategies in priority order (index 0 = highest priority)
-        for (let i = 0; i < enabledStrategies.length; i++) {
-            const strategy = enabledStrategies[i];
-
-            // Skip content field unless in fulltext mode
-            if (strategy.field === 'content' && searchType !== 'fulltext') {
-                continue;
+            if (!termMatch) {
+                allTermsMatched = false;
+                break;
             }
 
-            // Skip fuzzy strategies in this phase (handled by Fuse.js later)
-            if (strategy.matchType === 'fuzzy') {
-                continue;
-            }
-
-            // Get all text values for this field
-            const texts = getFieldText(bookmark, strategy.field);
-
-            // Check if any text matches (use effectiveQuery for @category searches)
-            const matched = texts.some(text => checkMatch(effectiveQuery, text, strategy.matchType));
-
-            if (matched) {
-                // Calculate score based on position in strategy list
-                const score = calculateScore(i, totalStrategies);
-                const matchType = fieldToMatchType(strategy.field, strategy.matchType);
-
-                // First match wins (because strategies are sorted by priority)
-                if (!bestMatch) {
-                    bestMatch = {
-                        score,
-                        matchType,
-                        field: strategy.field,
-                    };
-                    break; // Stop at first match - it's the highest priority
-                }
-            }
+            termMatches.push(termMatch);
         }
 
-        if (bestMatch) {
+        if (allTermsMatched && termMatches.length > 0) {
+            const primaryMatch = termMatches.reduce((best, current) =>
+                current.score > best.score ? current : best
+            );
+            const averageScore = termMatches.reduce((sum, match) => sum + match.score, 0) / termMatches.length;
+            const multiTermBonus = Math.min(8, Math.max(0, (termMatches.length - 1) * 2));
+            const combinedScore = Math.min(100, averageScore + multiTermBonus);
+
             results.set(bookmark.id, {
                 bookmark,
-                score: bestMatch.score,
-                matchType: bestMatch.matchType,
-                matchedField: bestMatch.field,
+                score: combinedScore,
+                matchType: primaryMatch.matchType,
+                matchedField: primaryMatch.field,
             });
         }
     }
@@ -350,31 +396,71 @@ export async function search(options: SearchOptions): Promise<SearchResult[]> {
     // ========================================
     const hasFuzzyStrategy = enabledStrategies.some(s => s.matchType === 'fuzzy');
 
-    if (fuseInstance && results.size < limit && hasFuzzyStrategy && effectiveQuery) {
-        const fuseResults = fuseInstance.search(effectiveQuery, { limit: limit - results.size });
-
-        // Find the lowest score position for fuzzy matches (bottom of strategies)
+    if (fuseInstance && results.size < limit && hasFuzzyStrategy && queryTerms.length > 0) {
+        // Find the configured score position for fuzzy matches
         const fuzzyIndex = enabledStrategies.findIndex(s => s.matchType === 'fuzzy');
         const fuzzyBaseScore = fuzzyIndex >= 0
             ? calculateScore(fuzzyIndex, totalStrategies)
             : 35; // Fallback if no fuzzy strategy configured
 
-        for (const result of fuseResults) {
-            if (!allowedIds.has(result.item.id)) {
+        const fuzzyCandidates = new Map<number, {
+            bookmark: BookmarkWithDetails;
+            hits: number;
+            qualitySum: number;
+        }>();
+
+        // Multi-term fuzzy: search each term and aggregate with AND semantics.
+        const perTermLimit = Math.max(limit * 5, 100);
+        for (const term of queryTerms) {
+            const termFuzzyResults = fuseInstance.search(term, { limit: perTermLimit });
+            const seenInTerm = new Set<number>();
+
+            for (const fuzzyResult of termFuzzyResults) {
+                const bookmarkId = fuzzyResult.item.id;
+                if (seenInTerm.has(bookmarkId)) {
+                    continue;
+                }
+                seenInTerm.add(bookmarkId);
+
+                if (!allowedIds.has(bookmarkId)) {
+                    continue;
+                }
+
+                const quality = 1 - (fuzzyResult.score || 0);
+                const existing = fuzzyCandidates.get(bookmarkId);
+
+                if (existing) {
+                    existing.hits += 1;
+                    existing.qualitySum += quality;
+                } else {
+                    fuzzyCandidates.set(bookmarkId, {
+                        bookmark: fuzzyResult.item,
+                        hits: 1,
+                        qualitySum: quality,
+                    });
+                }
+            }
+        }
+
+        for (const candidate of fuzzyCandidates.values()) {
+            // Require all query terms to be matched by fuzzy to keep precision.
+            if (candidate.hits < queryTerms.length) {
                 continue;
             }
-            if (!results.has(result.item.id)) {
-                // Adjust score based on Fuse.js match quality (0 = perfect, 1 = poor)
-                const fuseQuality = 1 - (result.score || 0);
-                const adjustedScore = fuzzyBaseScore * fuseQuality;
-
-                results.set(result.item.id, {
-                    bookmark: result.item,
-                    score: adjustedScore,
-                    matchType: 'fuzzy',
-                    matchedField: 'fuzzy',
-                });
+            if (results.has(candidate.bookmark.id)) {
+                continue;
             }
+
+            const avgQuality = candidate.qualitySum / candidate.hits;
+            const coverageBoost = Math.min(0.15, Math.max(0, (candidate.hits - 1) * 0.05));
+            const adjustedScore = fuzzyBaseScore * Math.min(1, avgQuality + coverageBoost);
+
+            results.set(candidate.bookmark.id, {
+                bookmark: candidate.bookmark,
+                score: adjustedScore,
+                matchType: 'fuzzy',
+                matchedField: 'fuzzy',
+            });
         }
     }
 
@@ -415,7 +501,7 @@ export function invalidateIndex(): void {
 // History Search (! prefix)
 // =====================================================
 
-const HISTORY_PREFIX = /^[!！]/;  // English and Chinese exclamation mark
+const HISTORY_PREFIX = /^[!\uFF01]/;  // English and full-width exclamation mark
 
 /**
  * Check if query is a history search
@@ -435,7 +521,7 @@ export function extractHistoryQuery(query: string): string {
 
 /**
  * Search history records via Chrome History API
- * When query is empty (just "!" or "！"), returns recent history
+ * When query is empty (just "!" or "�?), returns recent history
  */
 export async function searchHistory(rawQuery: string, limit = 100): Promise<HistorySearchResult[]> {
     const query = extractHistoryQuery(rawQuery);
