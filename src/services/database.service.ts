@@ -212,6 +212,11 @@ export const BookmarkRepository = {
         return result[0]?.count || 0;
     },
 
+    async repairStatusesFromSummaries(): Promise<number> {
+        const result = await execute(QUERIES.REPAIR_BOOKMARK_STATUS_FROM_SUMMARIES, [Date.now()]);
+        return result.changes;
+    },
+
     async getAllForIndex(): Promise<BookmarkWithDetails[]> {
         const rows = await query<Record<string, unknown>>(QUERIES.GET_ALL_FOR_INDEX);
         return rows.map(mapRowToBookmarkWithDetails);

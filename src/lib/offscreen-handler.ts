@@ -673,6 +673,26 @@ async function importDatabaseIncremental(buffer: ArrayBuffer): Promise<{
             }
         }
 
+        // Keep bookmark status consistent after summary import:
+        // if a bookmark has summary, it must be completed.
+        const repairedStatusResult = executeStatement(`
+            UPDATE bookmarks
+            SET
+                status = 'completed',
+                error_message = NULL,
+                analyzed_at = COALESCE(
+                    analyzed_at,
+                    (SELECT s.created_at FROM ai_summaries s WHERE s.bookmark_id = bookmarks.id)
+                ),
+                last_updated = ?
+            WHERE
+                status != 'completed'
+                AND EXISTS (SELECT 1 FROM ai_summaries s WHERE s.bookmark_id = bookmarks.id)
+        `, [Date.now()], true);
+        if (repairedStatusResult.changes > 0) {
+            logger.info(`Repaired ${repairedStatusResult.changes} bookmark statuses after import`);
+        }
+
         await yieldToEventLoop();
 
         // =====================================================

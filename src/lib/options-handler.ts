@@ -3,6 +3,8 @@
  * Handles API key configuration, sync status, and testing
  */
 
+import 'bootstrap/dist/css/bootstrap.min.css';
+import '../styles/options.css';
 import { apiKeys, activeProvider, syncStatus, extensionSettings, uiSettings, DEFAULT_FONT_SIZES, type FontSettings, searchStrategyOrder } from '../lib/storage';
 import { AI_PROVIDERS, MESSAGE_TYPES } from '../shared/constants';
 import { logger } from '../shared/logger';
@@ -30,6 +32,7 @@ const searchResults = document.getElementById('search-results') as HTMLDivElemen
 const totalBookmarksEl = document.getElementById('total-bookmarks') as HTMLDivElement;
 const summarizedCountEl = document.getElementById('summarized-count') as HTMLDivElement;
 const lastSyncEl = document.getElementById('last-sync') as HTMLDivElement;
+const themeSelect = document.getElementById('theme-select') as HTMLSelectElement | null;
 
 // Font settings DOM elements
 const fontSearchInputEl = document.getElementById('font-search-input') as HTMLInputElement;
@@ -43,6 +46,39 @@ const fontMetadataTextEl = document.getElementById('font-metadata-text') as HTML
 const saveUiBtn = document.getElementById('save-ui-btn') as HTMLButtonElement;
 const resetFontsBtn = document.getElementById('reset-fonts-btn') as HTMLButtonElement;
 const uiStatus = document.getElementById('ui-status') as HTMLDivElement;
+
+type ThemeMode = 'auto' | 'light' | 'dark';
+const THEME_STORAGE_KEY = 'options-theme-mode';
+const prefersDarkMedia = window.matchMedia('(prefers-color-scheme: dark)');
+let currentThemeMode: ThemeMode = 'auto';
+
+function getResolvedTheme(mode: ThemeMode): 'light' | 'dark' {
+    if (mode === 'light' || mode === 'dark') {
+        return mode;
+    }
+    return prefersDarkMedia.matches ? 'dark' : 'light';
+}
+
+function applyTheme(mode: ThemeMode): void {
+    currentThemeMode = mode;
+    document.documentElement.setAttribute('data-bs-theme', getResolvedTheme(mode));
+    if (themeSelect) {
+        themeSelect.value = mode;
+    }
+}
+
+function loadThemePreference(): void {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    const mode: ThemeMode = (saved === 'light' || saved === 'dark' || saved === 'auto')
+        ? saved
+        : 'auto';
+    applyTheme(mode);
+}
+
+function saveThemePreference(mode: ThemeMode): void {
+    localStorage.setItem(THEME_STORAGE_KEY, mode);
+    applyTheme(mode);
+}
 
 /**
  * Log to status box
@@ -183,12 +219,12 @@ async function testConnection() {
 
         const connected = await service.testConnection();
         if (connected) {
-            log(testResult, '✓ Connection successful!', 'success');
+            log(testResult, 'Connection successful.', 'success');
         } else {
-            log(testResult, '✗ Connection failed', 'error');
+            log(testResult, 'Connection failed.', 'error');
         }
     } catch (error) {
-        log(testResult, `✗ Connection error: ${error}`, 'error');
+        log(testResult, `Connection error: ${error}`, 'error');
     } finally {
         testBtn.disabled = false;
         testBtn.textContent = 'Test Connection';
@@ -312,9 +348,24 @@ testBtn.addEventListener('click', testConnection);
 syncBtn.addEventListener('click', triggerSync);
 summarizeBtn.addEventListener('click', triggerSummarization);
 searchBtn.addEventListener('click', testSearch);
+if (themeSelect) {
+    themeSelect.addEventListener('change', (event) => {
+        const mode = (event.target as HTMLSelectElement).value as ThemeMode;
+        if (mode === 'auto' || mode === 'light' || mode === 'dark') {
+            saveThemePreference(mode);
+        }
+    });
+}
+prefersDarkMedia.addEventListener('change', () => {
+    if (currentThemeMode === 'auto') {
+        applyTheme('auto');
+    }
+});
 testQueryInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') testSearch();
 });
+
+loadThemePreference();
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', loadConfig);
@@ -620,10 +671,11 @@ function renderStrategiesList() {
         item.draggable = true;
         item.dataset.id = strategy.id;
         item.dataset.index = String(index);
+        item.setAttribute('role', 'listitem');
 
         const handle = document.createElement('span');
         handle.className = 'drag-handle';
-        handle.textContent = '☰';
+        handle.textContent = '::';
 
         const label = document.createElement('span');
         label.className = 'strategy-label';
@@ -635,9 +687,10 @@ function renderStrategiesList() {
 
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
+        checkbox.className = 'form-check-input m-0';
         checkbox.checked = strategy.enabled;
         checkbox.dataset.id = strategy.id;
-        checkbox.title = '启用/禁用';
+        checkbox.title = 'Enable or disable';
 
         item.append(handle, label, type, checkbox);
         strategiesList.appendChild(item);
@@ -664,10 +717,10 @@ function renderStrategiesList() {
  */
 function getMatchTypeLabel(matchType: string): string {
     switch (matchType) {
-        case 'exact_case': return '精确';
-        case 'exact': return '大小写不敏感';
-        case 'pinyin': return '拼音';
-        case 'fuzzy': return '模糊';
+        case 'exact_case': return 'Exact';
+        case 'exact': return 'Case-insensitive';
+        case 'pinyin': return 'Pinyin';
+        case 'fuzzy': return 'Fuzzy';
         default: return matchType;
     }
 }
@@ -756,15 +809,15 @@ async function saveSearchStrategies() {
             strategies: currentStrategies.map(s => ({ id: s.id, enabled: s.enabled })),
         });
 
-        log(strategiesStatus, '搜索优先级已保存！ / Search priority saved!', 'success');
+        log(strategiesStatus, 'Search priority saved.', 'success');
         logger.info('Search strategies saved:', currentStrategies.length);
     } catch (error) {
-        log(strategiesStatus, `保存失败: ${error}`, 'error');
+        log(strategiesStatus, `Save failed: ${error}`, 'error');
         logger.error('Failed to save search strategies:', error);
     } finally {
         if (saveStrategiesBtn) {
             saveStrategiesBtn.disabled = false;
-            saveStrategiesBtn.textContent = '保存优先级 / Save Priority';
+            saveStrategiesBtn.textContent = 'Save Priority';
         }
     }
 }
@@ -787,15 +840,15 @@ async function resetSearchStrategies() {
         currentStrategies = [...DEFAULT_SEARCH_STRATEGIES];
         renderStrategiesList();
 
-        log(strategiesStatus, '已恢复默认优先级！ / Reset to defaults!', 'success');
+        log(strategiesStatus, 'Search priority reset to defaults.', 'success');
         logger.info('Search strategies reset to defaults');
     } catch (error) {
-        log(strategiesStatus, `重置失败: ${error}`, 'error');
+        log(strategiesStatus, `Reset failed: ${error}`, 'error');
         logger.error('Failed to reset search strategies:', error);
     } finally {
         if (resetStrategiesBtn) {
             resetStrategiesBtn.disabled = false;
-            resetStrategiesBtn.textContent = '恢复默认 / Reset';
+            resetStrategiesBtn.textContent = 'Reset';
         }
     }
 }
@@ -840,31 +893,31 @@ function startRefetchProgressListener() {
         clearStatus(importStatus);
 
         if (progress.phase === 'scanning') {
-            log(importStatus, `📊 扫描完成 / Scan complete`, 'success');
-            log(importStatus, `  需要修复: ${progress.total} bookmarks`, 'info');
+            log(importStatus, 'Scan complete.', 'success');
+            log(importStatus, `Need to process: ${progress.total} bookmarks`, 'info');
             if (progress.skippedDead > 0) {
-                log(importStatus, `  跳过死链: ${progress.skippedDead} dead websites`, 'info');
+                log(importStatus, `Skipped dead websites: ${progress.skippedDead}`, 'info');
             }
-            log(importStatus, `⏳ 开始处理... / Starting...`, 'info');
+            log(importStatus, 'Starting processing...', 'info');
         } else if (progress.phase === 'processing') {
-            log(importStatus, `🔄 处理中 / Processing...`, 'info');
-            log(importStatus, `  剩余: ${progress.remaining} / ${progress.total}`, 'info');
-            log(importStatus, `  成功: ${progress.success} ✓`, 'success');
+            log(importStatus, 'Processing...', 'info');
+            log(importStatus, `Remaining: ${progress.remaining} / ${progress.total}`, 'info');
+            log(importStatus, `Success: ${progress.success}`, 'success');
             if (progress.failed > 0) {
-                log(importStatus, `  失败: ${progress.failed} ✗`, 'error');
+                log(importStatus, `Failed: ${progress.failed}`, 'error');
             }
             if (progress.currentTitle) {
-                log(importStatus, `  当前: ${progress.currentTitle.substring(0, 40)}...`, 'info');
+                log(importStatus, `Current: ${progress.currentTitle.substring(0, 40)}...`, 'info');
             }
         } else if (progress.phase === 'complete') {
-            log(importStatus, `✅ 完成 / Complete!`, 'success');
-            log(importStatus, `  总计: ${progress.total} bookmarks`, 'info');
-            log(importStatus, `  成功: ${progress.success} ✓`, 'success');
+            log(importStatus, 'Complete!', 'success');
+            log(importStatus, `Total: ${progress.total} bookmarks`, 'info');
+            log(importStatus, `Success: ${progress.success}`, 'success');
             if (progress.failed > 0) {
-                log(importStatus, `  失败: ${progress.failed} ✗`, 'error');
+                log(importStatus, `Failed: ${progress.failed}`, 'error');
             }
             if (progress.skippedDead > 0) {
-                log(importStatus, `  跳过死链: ${progress.skippedDead}`, 'info');
+                log(importStatus, `Skipped dead websites: ${progress.skippedDead}`, 'info');
             }
         }
     };
@@ -890,10 +943,10 @@ async function triggerRefetchGarbled() {
 
     try {
         refetchGarbledBtn.disabled = true;
-        refetchGarbledBtn.textContent = '扫描中... / Scanning...';
+        refetchGarbledBtn.textContent = 'Scanning...';
         clearStatus(importStatus);
 
-        log(importStatus, '⏳ 扫描书签中... / Scanning bookmarks...', 'info');
+        log(importStatus, 'Scanning bookmarks...', 'info');
 
         // Start listening for progress updates
         startRefetchProgressListener();
@@ -905,33 +958,33 @@ async function triggerRefetchGarbled() {
                 stopRefetchProgressListener();
 
                 if (chrome.runtime.lastError) {
-                    log(importStatus, `错误: ${chrome.runtime.lastError.message}`, 'error');
+                    log(importStatus, `Error: ${chrome.runtime.lastError.message}`, 'error');
                 } else if (response?.success && response.result) {
                     const r = response.result;
                     // Final summary (progress listener should have shown intermediate updates)
                     if (r.errors && r.errors.length > 0 && r.errors.length <= 5) {
-                        log(importStatus, `错误详情:`, 'error');
+                        log(importStatus, 'Error details:', 'error');
                         r.errors.forEach((err: string) => {
                             log(importStatus, `  - ${err}`, 'error');
                         });
                     } else if (r.errors && r.errors.length > 5) {
-                        log(importStatus, `  (${r.errors.length} 个错误, 请查看控制台)`, 'error');
+                        log(importStatus, `(${r.errors.length} errors, check console for details)`, 'error');
                         logger.warn('Refetch errors:', r.errors);
                     }
                     // Refresh sync status
                     updateSyncStatus();
                 } else {
-                    log(importStatus, `失败: ${response?.error || 'Unknown error'}`, 'error');
+                    log(importStatus, `Failed: ${response?.error || 'Unknown error'}`, 'error');
                 }
                 refetchGarbledBtn.disabled = false;
-                refetchGarbledBtn.textContent = '修复乱码内容 / Refetch Garbled Content';
+                refetchGarbledBtn.textContent = 'Refetch Garbled Content';
             }
         );
     } catch (error) {
         stopRefetchProgressListener();
-        log(importStatus, `失败: ${error}`, 'error');
+        log(importStatus, `Failed: ${error}`, 'error');
         refetchGarbledBtn.disabled = false;
-        refetchGarbledBtn.textContent = '修复乱码内容 / Refetch Garbled Content';
+        refetchGarbledBtn.textContent = 'Refetch Garbled Content';
     }
 }
 

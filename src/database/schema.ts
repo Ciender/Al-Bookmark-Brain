@@ -341,9 +341,13 @@ export const QUERIES = {
   `,
 
   GET_BOOKMARKS_PENDING: `
-    SELECT * FROM bookmarks 
-    WHERE status = 'pending' OR (status = 'failed' AND retry_count < 3)
-    ORDER BY created_at ASC
+    SELECT b.*
+    FROM bookmarks b
+    LEFT JOIN ai_summaries s ON b.id = s.bookmark_id
+    WHERE
+      (b.status = 'pending' OR (b.status = 'failed' AND b.retry_count < 3))
+      AND s.bookmark_id IS NULL
+    ORDER BY b.created_at ASC
     LIMIT ?
   `,
 
@@ -397,6 +401,15 @@ export const QUERIES = {
       bookmark_id, ai_provider, ai_model, summary_text, 
       summary_text_lower, summary_original, confidence_score, language, created_at
     ) VALUES (?, ?, ?, ?, LOWER(?), ?, ?, ?, ?)
+    ON CONFLICT(bookmark_id) DO UPDATE SET
+      ai_provider = excluded.ai_provider,
+      ai_model = excluded.ai_model,
+      summary_text = excluded.summary_text,
+      summary_text_lower = excluded.summary_text_lower,
+      summary_original = excluded.summary_original,
+      confidence_score = excluded.confidence_score,
+      language = excluded.language,
+      created_at = excluded.created_at
   `,
 
   GET_SUMMARY_BY_BOOKMARK: `
@@ -499,7 +512,28 @@ export const QUERIES = {
   GET_BOOKMARK_COUNT: `SELECT COUNT(*) as count FROM bookmarks`,
   GET_SUMMARY_COUNT: `SELECT COUNT(*) as count FROM ai_summaries`,
   GET_TAG_COUNT: `SELECT COUNT(*) as count FROM tags`,
-  GET_PENDING_COUNT: `SELECT COUNT(*) as count FROM bookmarks WHERE status = 'pending'`,
+  GET_PENDING_COUNT: `
+    SELECT COUNT(*) as count
+    FROM bookmarks b
+    LEFT JOIN ai_summaries s ON b.id = s.bookmark_id
+    WHERE
+      (b.status = 'pending' OR (b.status = 'failed' AND b.retry_count < 3))
+      AND s.bookmark_id IS NULL
+  `,
+  REPAIR_BOOKMARK_STATUS_FROM_SUMMARIES: `
+    UPDATE bookmarks
+    SET
+      status = 'completed',
+      error_message = NULL,
+      analyzed_at = COALESCE(
+        analyzed_at,
+        (SELECT s.created_at FROM ai_summaries s WHERE s.bookmark_id = bookmarks.id)
+      ),
+      last_updated = ?
+    WHERE
+      status != 'completed'
+      AND EXISTS (SELECT 1 FROM ai_summaries s WHERE s.bookmark_id = bookmarks.id)
+  `,
 
   // ========== Sync Log ==========
   INSERT_SYNC_LOG: `

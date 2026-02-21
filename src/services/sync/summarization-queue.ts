@@ -29,6 +29,8 @@ import type { Bookmark, SummaryResult } from '../../shared/types';
 const SUMMARIZE_ALARM = 'summarize-next';
 const CHUNK_SIZE = 2; // Process 2 bookmarks per alarm
 const ALARM_DELAY_MINUTES = 0.083; // ~5 seconds between batches
+let isProcessingBatch = false;
+let didRepairSummaryStatuses = false;
 
 // =====================================================
 // Queue State Management (persisted to session storage)
@@ -48,8 +50,13 @@ async function isQueueRunning(): Promise<boolean> {
 export async function startSummarizationQueue(): Promise<void> {
     logger.info('Starting summarization queue (alarm-based)');
 
-    // Mark queue as running
-    await chrome.storage.session.set({ summarizing: true });
+    const running = await isQueueRunning();
+    if (!running) {
+        // Mark queue as running
+        await chrome.storage.session.set({ summarizing: true });
+    } else {
+        logger.debug('Summarization queue already marked as running, triggering next batch');
+    }
 
     // Process first batch immediately
     await processNextBatch();
@@ -73,14 +80,35 @@ export async function stopSummarizationQueue(): Promise<void> {
  * Called by alarm handler in background.ts
  */
 export async function processNextBatch(): Promise<void> {
+    if (isProcessingBatch) {
+        logger.debug('Summarization batch already in progress, skipping duplicate trigger');
+        return;
+    }
+
+    isProcessingBatch = true;
+
     // Check if queue should still be running
     const running = await isQueueRunning();
     if (!running) {
         logger.debug('Summarization queue not running, skipping batch');
+        isProcessingBatch = false;
         return;
     }
 
     try {
+        if (!didRepairSummaryStatuses) {
+            try {
+                const repaired = await BookmarkRepository.repairStatusesFromSummaries();
+                if (repaired > 0) {
+                    logger.info(`Repaired ${repaired} bookmark statuses from existing summaries`);
+                }
+            } catch (repairError) {
+                logger.warn('Failed to repair summary/bookmark status consistency:', repairError);
+            } finally {
+                didRepairSummaryStatuses = true;
+            }
+        }
+
         // Get pending bookmarks
         const pending = await BookmarkRepository.findPending(CHUNK_SIZE);
 
@@ -123,6 +151,8 @@ export async function processNextBatch(): Promise<void> {
         logger.error('Batch processing error:', error);
         // Continue with next batch despite errors
         await chrome.alarms.create(SUMMARIZE_ALARM, { delayInMinutes: ALARM_DELAY_MINUTES });
+    } finally {
+        isProcessingBatch = false;
     }
 }
 
@@ -142,6 +172,16 @@ async function fetchPageContent(url: string): Promise<string | null> {
  */
 async function summarizeBookmark(bookmark: Bookmark): Promise<boolean> {
     try {
+        // If summary already exists, don't call AI again.
+        const existingSummary = await AISummaryRepository.findByBookmarkId(bookmark.id);
+        if (existingSummary) {
+            if (bookmark.status !== 'completed') {
+                await BookmarkRepository.updateStatus(bookmark.id, 'completed');
+            }
+            logger.debug('Summary already exists, skipping AI call:', bookmark.originalTitle);
+            return true;
+        }
+
         // Update status to analyzing
         await BookmarkRepository.updateStatus(bookmark.id, 'analyzing');
 

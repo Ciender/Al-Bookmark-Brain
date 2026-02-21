@@ -451,6 +451,16 @@ async function initializeAsync(): Promise<void> {
       logger.warn('Failed to reset analyzing bookmarks:', error);
     }
 
+    // Repair inconsistent states where summary exists but bookmark status isn't completed.
+    try {
+      const repairedCount = await BookmarkRepository.repairStatusesFromSummaries();
+      if (repairedCount > 0) {
+        logger.info(`Repaired ${repairedCount} bookmark statuses from existing summaries`);
+      }
+    } catch (error) {
+      logger.warn('Failed to repair summary status consistency:', error);
+    }
+
     // Check if first run
     const firstRun = await isFirstRun.getValue();
     if (firstRun) {

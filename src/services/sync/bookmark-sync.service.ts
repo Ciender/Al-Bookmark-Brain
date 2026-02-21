@@ -194,6 +194,11 @@ export async function fullSync(): Promise<{ added: number; updated: number; erro
         }
 
         // Update sync status with counts
+        const repairedStatusCount = await BookmarkRepository.repairStatusesFromSummaries();
+        if (repairedStatusCount > 0) {
+            logger.info(`Repaired ${repairedStatusCount} bookmark statuses from existing summaries`);
+        }
+
         const totalBookmarks = await BookmarkRepository.count();
         const summarizedCount = await AISummaryRepository.count();
         const pendingCount = await BookmarkRepository.countPending();
