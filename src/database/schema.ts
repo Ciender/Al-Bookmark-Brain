@@ -576,6 +576,20 @@ export const QUERIES = {
       last_visit_at = excluded.last_visit_at
   `,
 
+  UPSERT_HISTORY_FROM_BROWSER: `
+    INSERT INTO history_records (
+      title, url, page_description, favicon_url,
+      source_type, search_query, bookmark_id,
+      visit_count, total_time_spent, first_visit_at, last_visit_at
+    ) VALUES (?, ?, NULL, ?, 'navigate', NULL, NULL, ?, 0, ?, ?)
+    ON CONFLICT(url) DO UPDATE SET
+      title = excluded.title,
+      favicon_url = COALESCE(excluded.favicon_url, favicon_url),
+      visit_count = MAX(history_records.visit_count, excluded.visit_count),
+      first_visit_at = MIN(history_records.first_visit_at, excluded.first_visit_at),
+      last_visit_at = MAX(history_records.last_visit_at, excluded.last_visit_at)
+  `,
+
   UPDATE_HISTORY_TIME_SPENT: `
     UPDATE history_records SET total_time_spent = total_time_spent + ?
     WHERE id = ?
@@ -596,6 +610,14 @@ export const QUERIES = {
     WHERE title LIKE ? OR url LIKE ? OR page_description LIKE ?
     ORDER BY visit_count DESC, last_visit_at DESC
     LIMIT ?
+  `,
+
+  COUNT_HISTORY: `
+    SELECT COUNT(*) as count FROM history_records
+  `,
+
+  CLEAR_HISTORY: `
+    DELETE FROM history_records
   `,
 
   DELETE_OLD_HISTORY: `

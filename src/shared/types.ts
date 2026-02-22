@@ -339,6 +339,7 @@ export interface SettingsExport {
         darkMode: boolean;
         searchHotkey: string;
         maxSearchResults: number;
+        historyCacheLimit: number;
     };
     userCategories: Array<{ id: number; name: string; color: string }>;
 }

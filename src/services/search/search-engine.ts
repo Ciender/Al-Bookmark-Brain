@@ -312,10 +312,26 @@ export async function search(options: SearchOptions): Promise<SearchResult[]> {
         categoryFilter = parsed.category;
         effectiveQuery = parsed.keyword;
 
-        // Filter by exact category name match (case-insensitive)
+        // Filter category with exact/partial/pinyin matching to align with normal search behavior
+        const lowerCategoryFilter = categoryFilter?.toLowerCase() || '';
         filteredIndex = filteredIndex.filter(bookmark => {
-            const catName = bookmark.category?.name?.toLowerCase();
-            return catName === categoryFilter?.toLowerCase();
+            const category = bookmark.category;
+            if (!category?.name) return false;
+
+            const catNameLower = category.name.toLowerCase();
+            if (catNameLower === lowerCategoryFilter || catNameLower.includes(lowerCategoryFilter)) {
+                return true;
+            }
+
+            if (category.namePinyin?.toLowerCase().includes(lowerCategoryFilter)) {
+                return true;
+            }
+
+            try {
+                return !!pinyinMatch.match(category.name, categoryFilter || '');
+            } catch {
+                return false;
+            }
         });
 
         logger.debug(`Category filter: "${categoryFilter}", keyword: "${effectiveQuery}", matching: ${filteredIndex.length}`);
@@ -502,6 +518,25 @@ export function invalidateIndex(): void {
 // =====================================================
 
 const HISTORY_PREFIX = /^[!\uFF01]/;  // English and full-width exclamation mark
+const HISTORY_RECENT_CACHE_TTL = 30_000;
+const HISTORY_MIN_DIRECT_RESULTS = 100;
+const HISTORY_MAX_FALLBACK_SCAN = 5000;
+const HISTORY_SCORE_STEP = 10_000_000_000_000;
+
+let cachedRecentHistory: chrome.history.HistoryItem[] = [];
+let cachedRecentHistoryAt = 0;
+
+interface HistoryMatchMeta {
+    priority: number;
+    matchType: MatchType;
+    matchedField: string;
+}
+
+const HISTORY_MATCH_PRIORITY = {
+    exact: 3,
+    pinyin: 2,
+    recent: 1,
+} as const;
 
 /**
  * Check if query is a history search
@@ -517,48 +552,252 @@ export function extractHistoryQuery(query: string): string {
     return query.replace(HISTORY_PREFIX, '').trim();
 }
 
-// History search index cache removed - using Chrome API directly
+function getHistoryItemKey(item: chrome.history.HistoryItem): string {
+    if (item.url) return item.url;
+    if (item.id !== undefined && item.id !== null) return String(item.id);
+    return `${item.title || ''}-${item.lastVisitTime || 0}`;
+}
+
+function buildHistoryResult(
+    item: chrome.history.HistoryItem,
+    meta: HistoryMatchMeta
+): HistorySearchResult {
+    const lastVisitAt = item.lastVisitTime || Date.now();
+    const faviconUrl = `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(item.url || '')}&size=32`;
+    const score = (meta.priority * HISTORY_SCORE_STEP) + lastVisitAt;
+
+    return {
+        history: {
+            id: item.id || item.url || '',
+            title: item.title || item.url || 'No Title',
+            url: item.url || '',
+            pageDescription: undefined,
+            faviconUrl,
+            sourceType: 'navigate',
+            visitCount: item.visitCount || 1,
+            totalTimeSpent: 0,
+            firstVisitAt: 0, // Not available from chrome.history.search
+            lastVisitAt,
+        },
+        score,
+        matchType: meta.matchType,
+        matchedField: meta.matchedField,
+    };
+}
+
+function inferDirectMatchMeta(item: chrome.history.HistoryItem, queryLower: string): HistoryMatchMeta {
+    const titleLower = (item.title || '').toLowerCase();
+    const urlLower = (item.url || '').toLowerCase();
+
+    if (titleLower.includes(queryLower)) {
+        return {
+            priority: HISTORY_MATCH_PRIORITY.exact,
+            matchType: 'exact',
+            matchedField: 'title',
+        };
+    }
+
+    if (urlLower.includes(queryLower)) {
+        return {
+            priority: HISTORY_MATCH_PRIORITY.exact,
+            matchType: 'exact',
+            matchedField: 'url',
+        };
+    }
+
+    // Chrome may return tokenized/fuzzy matches even without a strict substring hit.
+    return {
+        priority: HISTORY_MATCH_PRIORITY.exact,
+        matchType: 'exact',
+        matchedField: 'title',
+    };
+}
+
+function evaluateFallbackMatch(
+    item: chrome.history.HistoryItem,
+    terms: string[],
+    termsLower: string[]
+): HistoryMatchMeta | null {
+    if (terms.length === 0) {
+        return null;
+    }
+
+    const title = item.title || '';
+    const titleLower = title.toLowerCase();
+    const urlLower = (item.url || '').toLowerCase();
+
+    let usedPinyin = false;
+    let matchedField: string = 'title';
+
+    for (let i = 0; i < terms.length; i++) {
+        const term = terms[i];
+        const termLower = termsLower[i];
+
+        if (!termLower) {
+            continue;
+        }
+
+        if (titleLower.includes(termLower)) {
+            matchedField = 'title';
+            continue;
+        }
+
+        if (urlLower.includes(termLower)) {
+            matchedField = 'url';
+            continue;
+        }
+
+        let pinyinMatched = false;
+        if (title) {
+            try {
+                pinyinMatched = !!pinyinMatch.match(title, term);
+            } catch {
+                pinyinMatched = false;
+            }
+        }
+
+        if (!pinyinMatched) {
+            return null;
+        }
+
+        usedPinyin = true;
+        matchedField = 'title';
+    }
+
+    return {
+        priority: usedPinyin ? HISTORY_MATCH_PRIORITY.pinyin : HISTORY_MATCH_PRIORITY.exact,
+        matchType: usedPinyin ? 'pinyin' : 'exact',
+        matchedField,
+    };
+}
+
+async function getRecentHistoryForFallback(maxResults: number): Promise<chrome.history.HistoryItem[]> {
+    const now = Date.now();
+    if (
+        cachedRecentHistory.length >= maxResults &&
+        now - cachedRecentHistoryAt < HISTORY_RECENT_CACHE_TTL
+    ) {
+        return cachedRecentHistory.slice(0, maxResults);
+    }
+
+    const items = await chrome.history.search({
+        text: '',
+        maxResults,
+        startTime: 0,
+    });
+
+    items.sort((a, b) => (b.lastVisitTime || 0) - (a.lastVisitTime || 0));
+
+    cachedRecentHistory = items;
+    cachedRecentHistoryAt = now;
+    return items;
+}
 
 /**
- * Search history records via Chrome History API
- * When query is empty (just "!" or "ï¼?), returns recent history
+ * Search browser history via Chrome History API.
+ * Supports pinyin fallback for ASCII queries (e.g. "!lvbao" -> Chinese titles).
  */
 export async function searchHistory(rawQuery: string, limit = 100): Promise<HistorySearchResult[]> {
     const query = extractHistoryQuery(rawQuery);
 
     try {
-        const historyItems = await chrome.history.search({
-            text: query,
-            maxResults: limit,
-            startTime: 0
-        });
+        // "!" with no keyword: return recent history directly.
+        if (!query) {
+            const recentItems = await chrome.history.search({
+                text: '',
+                maxResults: limit,
+                startTime: 0,
+            });
 
-        // Sort by lastVisitTime descending (most recent first)
-        historyItems.sort((a, b) => (b.lastVisitTime || 0) - (a.lastVisitTime || 0));
-
-        return historyItems.map(item => {
-            // Construct favicon URL
-            // Use Chrome's _favicon helper
-            const faviconUrl = `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(item.url || '')}&size=32`;
-
-            return {
-                history: {
-                    id: item.id,
-                    title: item.title || item.url || 'No Title',
-                    url: item.url || '',
-                    pageDescription: undefined,
-                    faviconUrl,
-                    sourceType: 'navigate',
-                    visitCount: item.visitCount || 1,
-                    totalTimeSpent: 0,
-                    firstVisitAt: 0, // Not available from search
-                    lastVisitAt: item.lastVisitTime || Date.now(),
-                },
-                score: item.lastVisitTime || 0,
-                matchType: 'exact', // Chrome api handles matching
+            recentItems.sort((a, b) => (b.lastVisitTime || 0) - (a.lastVisitTime || 0));
+            return recentItems.map(item => buildHistoryResult(item, {
+                priority: HISTORY_MATCH_PRIORITY.recent,
+                matchType: 'exact',
                 matchedField: 'title',
-            };
+            }));
+        }
+
+        const directMaxResults = Math.max(limit * 3, HISTORY_MIN_DIRECT_RESULTS);
+        const directMatches = await chrome.history.search({
+            text: query,
+            maxResults: directMaxResults,
+            startTime: 0,
         });
+
+        const mergedMatches = new Map<string, {
+            item: chrome.history.HistoryItem;
+            meta: HistoryMatchMeta;
+        }>();
+
+        const upsertMatch = (item: chrome.history.HistoryItem, meta: HistoryMatchMeta): void => {
+            const key = getHistoryItemKey(item);
+            if (!key) return;
+
+            const existing = mergedMatches.get(key);
+            if (!existing) {
+                mergedMatches.set(key, { item, meta });
+                return;
+            }
+
+            const existingVisit = existing.item.lastVisitTime || 0;
+            const currentVisit = item.lastVisitTime || 0;
+            if (meta.priority > existing.meta.priority) {
+                mergedMatches.set(key, { item, meta });
+                return;
+            }
+            if (meta.priority === existing.meta.priority && currentVisit > existingVisit) {
+                mergedMatches.set(key, { item, meta });
+            }
+        };
+
+        const queryLower = query.toLowerCase();
+        for (const item of directMatches) {
+            upsertMatch(item, inferDirectMatchMeta(item, queryLower));
+        }
+
+        // For ASCII input, add a pinyin fallback against recent history.
+        // This makes queries like "!lvbao" match Chinese titles.
+        const normalizedAsciiQuery = query.replace(/\s+/g, '');
+        const shouldTryPinyinFallback =
+            /^[a-z0-9\s]+$/i.test(query) &&
+            normalizedAsciiQuery.length >= 2 &&
+            mergedMatches.size < limit;
+
+        if (shouldTryPinyinFallback) {
+            const fallbackScanLimit = Math.min(
+                Math.max(limit * 25, 800),
+                HISTORY_MAX_FALLBACK_SCAN
+            );
+
+            const fallbackPool = await getRecentHistoryForFallback(fallbackScanLimit);
+            const terms = splitQueryTerms(query);
+            const termsLower = terms.map(term => term.toLowerCase());
+
+            for (const item of fallbackPool) {
+                const key = getHistoryItemKey(item);
+                if (!key || mergedMatches.has(key)) {
+                    continue;
+                }
+
+                const meta = evaluateFallbackMatch(item, terms, termsLower);
+                if (!meta) {
+                    continue;
+                }
+
+                upsertMatch(item, meta);
+            }
+        }
+
+        const sorted = Array.from(mergedMatches.values())
+            .sort((a, b) => {
+                if (a.meta.priority !== b.meta.priority) {
+                    return b.meta.priority - a.meta.priority;
+                }
+                return (b.item.lastVisitTime || 0) - (a.item.lastVisitTime || 0);
+            })
+            .slice(0, limit);
+
+        return sorted.map(({ item, meta }) => buildHistoryResult(item, meta));
     } catch (error) {
         logger.error('Chrome history search failed:', error);
         return [];

@@ -659,6 +659,30 @@ export const HistoryRecordRepository = {
         return result.lastInsertRowId;
     },
 
+    async upsertFromBrowser(data: {
+        title: string;
+        url: string;
+        faviconUrl?: string;
+        visitCount?: number;
+        firstVisitAt?: number;
+        lastVisitAt?: number;
+    }): Promise<number> {
+        const now = Date.now();
+        const firstVisitAt = data.firstVisitAt || data.lastVisitAt || now;
+        const lastVisitAt = data.lastVisitAt || now;
+        const visitCount = Math.max(1, data.visitCount || 1);
+
+        const result = await execute(QUERIES.UPSERT_HISTORY_FROM_BROWSER, [
+            data.title || data.url || 'No Title',
+            data.url,
+            data.faviconUrl || null,
+            visitCount,
+            firstVisitAt,
+            lastVisitAt,
+        ]);
+        return result.lastInsertRowId;
+    },
+
     async getByUrl(url: string): Promise<HistoryRecord | null> {
         const rows = await query<Record<string, unknown>>(QUERIES.GET_HISTORY_BY_URL, [url]);
         return rows.length > 0 ? mapRowToHistoryRecord(rows[0]) : null;
@@ -686,6 +710,26 @@ export const HistoryRecordRepository = {
         if (result.changes > 0) {
             logger.info('Cleaned up old history records:', result.changes);
         }
+        return result.changes;
+    },
+
+    async count(): Promise<number> {
+        const rows = await query<{ count: number }>(QUERIES.COUNT_HISTORY);
+        return rows[0]?.count || 0;
+    },
+
+    async deleteByUrls(urls: string[]): Promise<number> {
+        if (!urls || urls.length === 0) return 0;
+        const placeholders = urls.map(() => '?').join(', ');
+        const result = await execute(
+            `DELETE FROM history_records WHERE url IN (${placeholders})`,
+            urls
+        );
+        return result.changes;
+    },
+
+    async clear(): Promise<number> {
+        const result = await execute(QUERIES.CLEAR_HISTORY);
         return result.changes;
     },
 };

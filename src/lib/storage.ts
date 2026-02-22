@@ -54,12 +54,14 @@ export const extensionSettings = storage.defineItem<{
     darkMode: boolean;
     searchHotkey: string;
     maxSearchResults: number;
+    historyCacheLimit: number;
 }>('local:extensionSettings', {
     defaultValue: {
         autoSummarize: true,
         darkMode: true,
         searchHotkey: 'Ctrl+Q',
         maxSearchResults: 20,
+        historyCacheLimit: 10000,
     },
 });
 

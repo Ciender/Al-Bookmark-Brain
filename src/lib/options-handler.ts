@@ -33,6 +33,9 @@ const totalBookmarksEl = document.getElementById('total-bookmarks') as HTMLDivEl
 const summarizedCountEl = document.getElementById('summarized-count') as HTMLDivElement;
 const lastSyncEl = document.getElementById('last-sync') as HTMLDivElement;
 const themeSelect = document.getElementById('theme-select') as HTMLSelectElement | null;
+const historyCacheLimitInput = document.getElementById('history-cache-limit') as HTMLInputElement | null;
+const saveHistorySettingsBtn = document.getElementById('save-history-settings-btn') as HTMLButtonElement | null;
+const historySettingsStatus = document.getElementById('history-settings-status') as HTMLDivElement | null;
 
 // Font settings DOM elements
 const fontSearchInputEl = document.getElementById('font-search-input') as HTMLInputElement;
@@ -51,6 +54,8 @@ type ThemeMode = 'auto' | 'light' | 'dark';
 const THEME_STORAGE_KEY = 'options-theme-mode';
 const prefersDarkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 let currentThemeMode: ThemeMode = 'auto';
+const MIN_HISTORY_CACHE_LIMIT = 200;
+const MAX_HISTORY_CACHE_LIMIT = 200000;
 
 function getResolvedTheme(mode: ThemeMode): 'light' | 'dark' {
     if (mode === 'light' || mode === 'dark') {
@@ -123,6 +128,77 @@ async function loadConfig() {
         logger.info('Configuration loaded');
     } catch (error) {
         logger.error('Failed to load configuration:', error);
+    }
+}
+
+function normalizeHistoryCacheLimit(raw: number | null | undefined): number {
+    if (!Number.isFinite(raw)) {
+        return 10000;
+    }
+    const rounded = Math.round(raw as number);
+    return Math.min(MAX_HISTORY_CACHE_LIMIT, Math.max(MIN_HISTORY_CACHE_LIMIT, rounded));
+}
+
+/**
+ * Load extension history settings from storage
+ */
+async function loadHistorySettings() {
+    if (!historyCacheLimitInput) return;
+
+    try {
+        const settings = await extensionSettings.getValue();
+        const value = normalizeHistoryCacheLimit(settings?.historyCacheLimit);
+        historyCacheLimitInput.value = String(value);
+        logger.info('History settings loaded:', value);
+    } catch (error) {
+        logger.error('Failed to load history settings:', error);
+    }
+}
+
+/**
+ * Save extension history settings to storage
+ */
+async function saveHistorySettings() {
+    if (!saveHistorySettingsBtn || !historyCacheLimitInput) return;
+
+    try {
+        saveHistorySettingsBtn.disabled = true;
+        saveHistorySettingsBtn.textContent = 'Saving...';
+        if (historySettingsStatus) clearStatus(historySettingsStatus);
+
+        const rawValue = parseInt(historyCacheLimitInput.value, 10);
+        const historyCacheLimit = normalizeHistoryCacheLimit(rawValue);
+        historyCacheLimitInput.value = String(historyCacheLimit);
+
+        const current = await extensionSettings.getValue();
+        await extensionSettings.setValue({
+            autoSummarize: current?.autoSummarize ?? true,
+            darkMode: current?.darkMode ?? true,
+            searchHotkey: current?.searchHotkey ?? 'Ctrl+Q',
+            maxSearchResults: current?.maxSearchResults ?? 20,
+            historyCacheLimit,
+        });
+
+        // Apply new cap immediately in background
+        await new Promise<void>((resolve) => {
+            chrome.runtime.sendMessage(
+                { type: MESSAGE_TYPES.HISTORY_ENFORCE_LIMIT },
+                () => resolve()
+            );
+        });
+
+        if (historySettingsStatus) {
+            log(historySettingsStatus, `History cache limit saved: ${historyCacheLimit}`, 'success');
+        }
+        logger.info('History settings saved:', historyCacheLimit);
+    } catch (error) {
+        if (historySettingsStatus) {
+            log(historySettingsStatus, `Failed to save: ${error}`, 'error');
+        }
+        logger.error('Failed to save history settings:', error);
+    } finally {
+        saveHistorySettingsBtn.disabled = false;
+        saveHistorySettingsBtn.textContent = 'Save History Settings';
     }
 }
 
@@ -348,6 +424,16 @@ testBtn.addEventListener('click', testConnection);
 syncBtn.addEventListener('click', triggerSync);
 summarizeBtn.addEventListener('click', triggerSummarization);
 searchBtn.addEventListener('click', testSearch);
+if (saveHistorySettingsBtn) {
+    saveHistorySettingsBtn.addEventListener('click', saveHistorySettings);
+}
+if (historyCacheLimitInput) {
+    historyCacheLimitInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            saveHistorySettings();
+        }
+    });
+}
 if (themeSelect) {
     themeSelect.addEventListener('change', (event) => {
         const mode = (event.target as HTMLSelectElement).value as ThemeMode;
@@ -369,10 +455,12 @@ loadThemePreference();
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', loadConfig);
+document.addEventListener('DOMContentLoaded', loadHistorySettings);
 
 // Also run immediately in case DOMContentLoaded already fired
 if (document.readyState !== 'loading') {
     loadConfig();
+    loadHistorySettings();
 }
 
 // Listen for storage changes to auto-update UI

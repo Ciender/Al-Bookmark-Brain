@@ -56,6 +56,7 @@ export const MESSAGE_TYPES = {
     // History search (! prefix)
     SEARCH_HISTORY: 'search:history',
     RECORD_HISTORY: 'history:record',
+    HISTORY_ENFORCE_LIMIT: 'history:enforce-limit',
 
     // Bookmark operations from UI
     ADD_BOOKMARK: 'bookmark:add',

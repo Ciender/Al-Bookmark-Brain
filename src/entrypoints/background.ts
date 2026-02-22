@@ -12,9 +12,16 @@ import { isFirstRun } from '../lib/storage';
 import { onMessage, initMessageListener } from '../lib/messaging';
 import { fullSync, setupBookmarkListeners } from '../services/sync/bookmark-sync.service';
 import { startSummarizationQueue, processNextBatch, stopSummarizationQueue, refetchGarbledContent } from '../services/sync/summarization-queue';
-import { search, searchHistory, invalidateIndex } from '../services/search/search-engine';
+import { search, invalidateIndex } from '../services/search/search-engine';
+import {
+  searchHistory,
+  recordHistoryVisit,
+  removeHistoryRecords,
+  warmupHistoryCache,
+  enforceHistoryCacheLimit,
+} from '../services/search/history-search';
 import { recordSelection } from '../services/search/frecency.service';
-import { HistoryRecordRepository, BookmarkRepository, CategoryRepository } from '../services/database.service';
+import { BookmarkRepository, CategoryRepository } from '../services/database.service';
 
 
 // =====================================================
@@ -315,6 +322,12 @@ function setupMessageHandlers(): void {
     return { results };
   });
 
+  // Enforce local history cache row limit
+  onMessage(MESSAGE_TYPES.HISTORY_ENFORCE_LIMIT, async () => {
+    await enforceHistoryCacheLimit(true);
+    return { success: true };
+  });
+
   // Add bookmark from history panel
   onMessage(MESSAGE_TYPES.ADD_BOOKMARK, async (data: { url: string; title: string }) => {
     logger.debug('Add bookmark request:', data);
@@ -434,6 +447,13 @@ async function initializeAsync(): Promise<void> {
     // Set up bookmark listeners
     setupBookmarkListeners();
 
+    // Warm up local history cache for ! search (DB-first + API fallback)
+    try {
+      await warmupHistoryCache();
+    } catch (error) {
+      logger.warn('Failed to warm up history cache:', error);
+    }
+
     // Resume interrupted summarization queue
     const { summarizing } = await chrome.storage.session.get('summarizing');
     if (summarizing) {
@@ -516,6 +536,19 @@ export default defineBackground(() => {
     if (alarm.name === SUMMARIZE_ALARM) {
       handleSummarizeAlarm();
     }
+  });
+
+  // 3. Browser history listeners - keep local ! search cache synced
+  chrome.history.onVisited.addListener((item: chrome.history.HistoryItem) => {
+    recordHistoryVisit(item).catch((error) => {
+      logger.debug('Failed to record visited history item:', error);
+    });
+  });
+
+  chrome.history.onVisitRemoved.addListener((removed: chrome.history.RemovedResult) => {
+    removeHistoryRecords(removed).catch((error) => {
+      logger.debug('Failed to remove history records from cache:', error);
+    });
   });
 
 
